@@ -6,6 +6,7 @@ cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 FILE="simple_butterfly_matrix_v4_tape_lane/tape_lane_transport_v4_3_min_heart.py"
 WRAP="simple_butterfly_matrix_v4_tape_lane/commands/run_v4_3_min_heart_audit_fixed.sh"
 CTX="simple_butterfly_matrix_v4_tape_lane/commands/run_v4_3_context_controller.sh"
+CTX_SMOKE="simple_butterfly_matrix_v4_tape_lane/commands/smoke_v4_3_context_controller.sh"
 SYNC="simple_butterfly_matrix_v4_tape_lane/commands/sync_run_5ep_v4_3_min_heart_push_logs.sh"
 GRAD="simple_butterfly_matrix_v4_tape_lane/commands/grad_sanity_v4_3_min_heart.sh"
 PLAN="simple_butterfly_matrix_v4_tape_lane/V4_3_MIN_HEART_PLAN.md"
@@ -15,6 +16,7 @@ python -m py_compile "$FILE"
 
 echo "[validate v4.3] --help smoke"
 python "$FILE" --help >/tmp/v4_3_min_heart_help.txt
+bash "$CTX" --help >/tmp/v4_3_context_controller_help.txt || true
 
 echo "[validate v4.3] required implementation markers in base file"
 grep -q "route_offdiag_outside_boundary_cost" "$FILE"
@@ -53,6 +55,12 @@ grep -q "context_controller_scale" "$CTX"
 grep -q "base.v42.TapeLaneRouterBackbone = ContextTapeLaneRouterBackbone" "$CTX"
 grep -q "context_controller_active" "$CTX"
 grep -q "deploy.*False" "$CTX"
+
+echo "[validate v4.3] context-controller smoke markers"
+test -f "$CTX_SMOKE"
+grep -q "CONTEXT_CONTROLLER_SCALE" "$CTX_SMOKE"
+grep -q "--synthetic" "$CTX_SMOKE"
+grep -q "context_controller" "$CTX_SMOKE"
 
 echo "[validate v4.3] speed markers"
 grep -q "make_loaders_fast" "$CTX"

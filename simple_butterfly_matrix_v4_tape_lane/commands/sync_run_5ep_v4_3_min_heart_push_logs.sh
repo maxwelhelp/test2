@@ -26,6 +26,9 @@ COMPARE_TO="${COMPARE_TO:-v4.2_fixed_guided same seed/config or baseline_missing
 echo "[v4.3 sync] validate"
 bash simple_butterfly_matrix_v4_tape_lane/commands/validate_v4_3_min_heart.sh
 
+echo "[v4.3 sync] gradient sanity"
+OUT="$REPORT_DIR/grad_sanity.json" bash simple_butterfly_matrix_v4_tape_lane/commands/grad_sanity_v4_3_min_heart.sh | tee "$REPORT_DIR/grad_sanity.log"
+
 echo "[v4.3 sync] run -> $REPORT_DIR"
 set +e
 python simple_butterfly_matrix_v4_tape_lane/tape_lane_transport_v4_3_min_heart.py \
@@ -90,6 +93,8 @@ Command: sync_run_5ep_v4_3_min_heart_push_logs.sh
 Run status: $RUN_STATUS
 
 Expected artifacts:
+- grad_sanity.json
+- grad_sanity.log
 - metrics.csv
 - analysis_epoch_XXX.json
 - trace_feedback_epoch_XXX.json

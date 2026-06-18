@@ -12,8 +12,11 @@ RUN_ID="${RUN_ID:-$(date +%Y%m%d_%H%M%S)}"
 OUT_DIR="${OUT_DIR:-simple_butterfly_matrix_v4_tape_lane/runs/speechcommands_5ep_${RUN_ID}}"
 mkdir -p "$OUT_DIR"
 
+echo "[validate] checking v4 code before run"
+bash simple_butterfly_matrix_v4_tape_lane/commands/validate_v4.sh 2>&1 | tee "$OUT_DIR/validate.log"
+
 echo "[run] output dir: $OUT_DIR"
-echo "[run] starting 5 epoch TapeLaneRouter test"
+echo "[run] starting 5 epoch TapeLaneRouter v4.1 test"
 
 set +e
 python simple_butterfly_matrix_v4_tape_lane/tape_lane_transport.py \
@@ -51,6 +54,7 @@ git add \
   "$OUT_DIR"/analysis_epoch_*.json \
   "$OUT_DIR/final_report.json" \
   "$OUT_DIR/REPORT_TO_CHATGPT.txt" \
+  "$OUT_DIR/validate.log" \
   "$OUT_DIR/train.log" 2>/dev/null || true
 
 if ! git diff --cached --quiet; then

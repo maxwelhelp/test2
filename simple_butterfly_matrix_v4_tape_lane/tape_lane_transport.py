@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
-"""v4: tape-lane router matrix program.
+"""v4.1: tape-lane router matrix program.
 
-This version keeps the useful v3 idea (trainable class matrices + class-pair
-repair) but removes fixed extract/compare/suppress/aggregate phases.
+Real implementation version:
+  - no hard router / no top-k;
+  - no fixed extract/compare/suppress/aggregate phase roles;
+  - structured lane initialization from real evidence cells;
+  - separator_t = boundary_t + route_matrix_t;
+  - ClassMatrixLaneHead keeps the v3 class-state + pair repair idea.
 
 Backbone:
-  evidence -> lanes/cells -> T tape steps
-  read -> transform -> route/write
-  soft step_alive, soft boundary, soft lane route matrices
-
-No hard router and no top-k are used.
+  raw wav -> MatrixEvidence -> structured lanes/cells -> T tape steps
+  each step: lane-aware read -> neutral transform primitives -> soft route/write.
 """
 
 from __future__ import annotations
@@ -45,7 +46,24 @@ from simple_butterfly_matrix.simple_butterfly_matrix import (  # noqa: E402
 
 LANE_NAMES = ("detail", "state", "abstract", "memory")
 READ_GROUP_NAMES = ("input", "detail", "state", "abstract", "memory")
-PRIMITIVES = ("channel", "block", "low_rank", "ctx_matrix", "product", "generic")
+PRIMITIVES = (
+    "channel",
+    "block",
+    "low_rank",
+    "ctx_matrix",
+    "product_gate",
+    "diff",
+    "gated_contrast",
+    "memory_keep",
+)
+
+
+def lane_name(i: int) -> str:
+    return LANE_NAMES[i] if i < len(LANE_NAMES) else f"lane{i}"
+
+
+def read_group_name(i: int) -> str:
+    return READ_GROUP_NAMES[i] if i < len(READ_GROUP_NAMES) else f"lane{i - 1}"
 
 
 def _to_float_list(x: torch.Tensor):
@@ -56,6 +74,15 @@ def entropy(p: torch.Tensor, dim: int = -1, eps: float = 1e-8) -> torch.Tensor:
     p = p.float().clamp_min(eps)
     p = p / p.sum(dim=dim, keepdim=True).clamp_min(eps)
     return -(p * p.log()).sum(dim=dim)
+
+
+def resize_cells(x: torch.Tensor, cells: int) -> torch.Tensor:
+    """Resize [B,E,D] evidence/state cells to [B,cells,D] without fake data."""
+
+    if x.shape[1] == cells:
+        return x
+    y = F.adaptive_avg_pool1d(x.transpose(1, 2).float(), int(cells)).transpose(1, 2)
+    return y.to(dtype=x.dtype, device=x.device)
 
 
 @dataclass
@@ -69,6 +96,8 @@ class TapeLaneAux:
     routes: torch.Tensor              # [T,L,L]
     route_entropy: torch.Tensor       # [T,L]
     read_group_mass: torch.Tensor     # [T,L,L+1]
+    primitive_weights: torch.Tensor   # [T,L,P]
+    lane_init_norm: torch.Tensor      # [L]
     late_input_read_mass: torch.Tensor
 
 
@@ -102,10 +131,11 @@ def class_lane_prior(classes: int, lanes: int) -> torch.Tensor:
 
 
 class TapeLaneTransformUnit(nn.Module):
-    """Small neutral transform bank for one tape step.
+    """Neutral transform bank for one tape step.
 
-    It deliberately has no phase-specific branches. All candidates are generic
-    matrix operations and lanes learn soft mixtures over them.
+    Read/write are dataflow. This module is compute: channel/cell mixing,
+    low-rank context, product gates, difference/contrast, and keep/forget style
+    memory primitive. There are no phase-specific if branches.
     """
 
     def __init__(self, dim: int, lanes: int, cells_per_lane: int, channel_stages: int, dropout: float):
@@ -119,8 +149,12 @@ class TapeLaneTransformUnit(nn.Module):
         self.low_a = nn.Parameter(torch.randn(dim, rank) * 0.04)
         self.low_b = nn.Parameter(torch.randn(rank, dim) * 0.04)
         self.ctx_w = nn.Parameter(torch.randn(dim, dim) * 0.04)
+        self.diff_w = nn.Parameter(torch.randn(dim, dim) * 0.025)
+        self.contrast_w = nn.Parameter(torch.randn(dim, dim) * 0.025)
         self.gate_h = nn.Parameter(torch.randn(dim, dim) * 0.02)
         self.gate_c = nn.Parameter(torch.randn(dim, dim) * 0.02)
+        self.keep_h = nn.Parameter(torch.randn(dim, dim) * 0.02)
+        self.keep_c = nn.Parameter(torch.randn(dim, dim) * 0.02)
         self.gate_bias = nn.Parameter(torch.full((dim,), -0.35))
         self.primitive_logits = nn.Parameter(torch.zeros(len(PRIMITIVES)))
         self.lane_primitive_bias = nn.Linear(dim, len(PRIMITIVES), bias=False)
@@ -137,31 +171,43 @@ class TapeLaneTransformUnit(nn.Module):
         channel = self.channel(flat_x + ctx_m)
         block = self.block(flat_x)
         low = (flat_x @ self.low_a.to(device=x.device, dtype=x.dtype)) @ self.low_b.to(device=x.device, dtype=x.dtype)
-        product = flat_x * torch.tanh(ctx_m)
+
         gate = torch.sigmoid(
             flat_x @ self.gate_h.to(device=x.device, dtype=x.dtype)
             + ctx_m @ self.gate_c.to(device=x.device, dtype=x.dtype)
             + self.gate_bias.to(device=x.device, dtype=x.dtype)
         )
-        generic = gate * channel + (1.0 - gate) * low
+        product_gate = flat_x * torch.tanh(ctx_m)
+        diff = (flat_x - ctx_m) @ self.diff_w.to(device=x.device, dtype=x.dtype)
+        contrast = torch.tanh((flat_x - ctx_m) @ self.contrast_w.to(device=x.device, dtype=x.dtype)) * (flat_x + ctx_m)
+        keep = torch.sigmoid(
+            flat_x @ self.keep_h.to(device=x.device, dtype=x.dtype)
+            + ctx_m @ self.keep_c.to(device=x.device, dtype=x.dtype)
+        )
+        memory_keep = keep * flat_x + (1.0 - keep) * ctx_m
 
-        cands = torch.stack([channel, block, low, ctx_m, product, generic], dim=2)  # [B*L,A,P,D]
+        cands = torch.stack(
+            [channel, block, low, ctx_m, product_gate, diff, contrast, memory_keep],
+            dim=2,
+        )  # [B*L,A,P,D]
 
         lane_bias = self.lane_primitive_bias(lane_embed.to(device=x.device, dtype=x.dtype)).float()  # [L,P]
         weights = torch.softmax(self.primitive_logits.float().view(1, -1) + lane_bias, dim=-1).to(x.dtype)
-        weights = weights.view(1, lanes, 1, len(PRIMITIVES), 1).expand(bsz, -1, cells, -1, -1).reshape(bsz * lanes, cells, len(PRIMITIVES), 1)
+        weights_full = weights.view(1, lanes, 1, len(PRIMITIVES), 1).expand(bsz, -1, cells, -1, -1)
+        weights_flat = weights_full.reshape(bsz * lanes, cells, len(PRIMITIVES), 1)
 
-        update = (weights * cands).sum(dim=2)
+        update = (weights_flat * cands).sum(dim=2)
         update = self.update_norm(self.drop(update * gate)).reshape(bsz, lanes, cells, dim)
 
         return update, {
-            "primitive_weights": weights.detach().reshape(bsz, lanes, cells, len(PRIMITIVES)).float().mean(dim=(0, 2)),
+            "primitive_weights": weights.detach(),  # [L,P]
             "gate_mean": gate.detach().float().mean(),
+            "keep_mean": keep.detach().float().mean(),
         }
 
 
 class TapeLaneRouterBackbone(nn.Module):
-    """One growing program tape with soft lane route matrices."""
+    """One program tape with soft lane route matrices and soft boundaries."""
 
     def __init__(
         self,
@@ -187,20 +233,43 @@ class TapeLaneRouterBackbone(nn.Module):
         self.step_embed = nn.Parameter(torch.randn(tape_steps, dim) * 0.02)
         self.init_query = nn.Parameter(torch.randn(lanes, cells_per_lane, dim) * 0.04)
 
+        eye = torch.eye(dim)
+        self.detail_w = nn.Parameter(eye + 0.02 * torch.randn(dim, dim))
+        self.detail_diff_w = nn.Parameter(0.03 * torch.randn(dim, dim))
+        self.abstract_w = nn.Parameter(eye + 0.02 * torch.randn(dim, dim))
+        self.memory_w = nn.Parameter(0.03 * torch.randn(dim, dim))
+        self.memory_seed = nn.Parameter(torch.randn(cells_per_lane, dim) * 0.04)
+        self.init_norm = nn.LayerNorm(dim)
+
         alive_init = torch.linspace(1.15, -0.85, tape_steps)
         self.step_alive_logit = nn.Parameter(alive_init)
         self.boundary_logit = nn.Parameter(torch.full((tape_steps,), -1.25))
         self.route_logits = nn.Parameter(torch.eye(lanes).view(1, lanes, lanes).repeat(tape_steps, 1, 1) * 0.35)
-        self.read_group_logits = nn.Parameter(torch.zeros(tape_steps, lanes, lanes + 1))
+
+        read_init = torch.zeros(tape_steps, lanes, lanes + 1)
+        for t in range(tape_steps):
+            depth = float(t + 1) / float(max(1, tape_steps))
+            for lane in range(lanes):
+                read_init[t, lane, 1 + lane] += 0.35
+                read_init[t, lane, 0] += 0.45 * max(0.0, 1.0 - 1.6 * depth)
+                read_init[t, lane, 0] -= 0.25 * depth
+            if lanes >= 4:
+                read_init[t, 0, 0] += 0.25 * max(0.0, 1.0 - depth)
+                read_init[t, 1, 1 + 0] += 0.15
+                read_init[t, 2, 1 + 1] += 0.20
+                read_init[t, 3, 1 + 3] += 0.35
+                read_init[t, 3, 0] -= 0.30
+        self.read_group_logits = nn.Parameter(read_init)
+
         self.read_query_w = nn.Parameter(torch.randn(tape_steps, lanes, dim, dim) * 0.025)
         self.write_gate_logit = nn.Parameter(torch.full((tape_steps, lanes), -0.35))
 
-        # Weak useful bias only: when boundary grows, allow state->abstract/memory movement.
         bias = torch.zeros(lanes, lanes)
         if lanes >= 4:
             bias[1, 2] = 0.30
             bias[1, 3] = 0.18
             bias[0, 1] = 0.12
+            bias[3, 1] = 0.10
         self.register_buffer("boundary_route_bias", bias)
 
         self.units = nn.ModuleList([
@@ -209,25 +278,56 @@ class TapeLaneRouterBackbone(nn.Module):
         ])
         self.norm = nn.LayerNorm(dim)
 
-    def init_lanes(self, evidence: torch.Tensor) -> torch.Tensor:
-        # evidence: [B,E,D]
-        q = self.init_query.to(device=evidence.device, dtype=evidence.dtype).reshape(self.lanes * self.cells_per_lane, self.dim)
+    def _attention_init_lane(self, evidence: torch.Tensor, lane: int) -> torch.Tensor:
+        q = self.init_query[lane].to(device=evidence.device, dtype=evidence.dtype)
         score = torch.einsum("ad,bed->bae", q, evidence) / math.sqrt(self.dim)
         attn = torch.softmax(score.float(), dim=-1).to(evidence.dtype)
-        base = torch.einsum("bae,bed->bad", attn, evidence)
-        x = base.reshape(evidence.shape[0], self.lanes, self.cells_per_lane, self.dim)
+        return torch.einsum("bae,bed->bad", attn, evidence)
+
+    def init_lanes(self, evidence: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        # evidence: [B,E,D]
+        bsz = evidence.shape[0]
+        local = resize_cells(evidence, self.cells_per_lane)
+        prev = torch.roll(local, shifts=1, dims=1)
+        nxt = torch.roll(local, shifts=-1, dims=1)
+        local_diff = 0.5 * (nxt - prev)
+        detail = (local @ self.detail_w.to(device=evidence.device, dtype=evidence.dtype)) + (
+            local_diff @ self.detail_diff_w.to(device=evidence.device, dtype=evidence.dtype)
+        )
+
+        lane_states: List[torch.Tensor] = []
+        if self.lanes >= 1:
+            lane_states.append(detail)
+        if self.lanes >= 2:
+            lane_states.append(self._attention_init_lane(evidence, 1))
+        if self.lanes >= 3:
+            mean = evidence.mean(dim=1, keepdim=True)
+            std = evidence.float().std(dim=1, keepdim=True).to(evidence.dtype)
+            abstract = (mean + 0.25 * std).expand(bsz, self.cells_per_lane, self.dim)
+            abstract = abstract @ self.abstract_w.to(device=evidence.device, dtype=evidence.dtype)
+            lane_states.append(abstract)
+        if self.lanes >= 4:
+            summary = evidence.mean(dim=1, keepdim=True).expand(bsz, self.cells_per_lane, self.dim)
+            memory = self.memory_seed.to(device=evidence.device, dtype=evidence.dtype).view(1, self.cells_per_lane, self.dim)
+            memory = memory + 0.05 * (summary @ self.memory_w.to(device=evidence.device, dtype=evidence.dtype))
+            lane_states.append(memory)
+
+        while len(lane_states) < self.lanes:
+            lane_states.append(self._attention_init_lane(evidence, len(lane_states)))
+
+        x = torch.stack(lane_states, dim=1)
         x = x + self.lane_embed.to(device=evidence.device, dtype=evidence.dtype).view(1, self.lanes, 1, self.dim)
-        return self.norm(x)
+        x = self.init_norm(x)
+        lane_init_norm = x.detach().float().norm(dim=-1).mean(dim=(0, 2))
+        return x, lane_init_norm
 
     def read_step(self, x: torch.Tensor, evidence: torch.Tensor, t: int) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
-        # input context per target lane/cell.
         w = self.read_query_w[t].to(device=x.device, dtype=x.dtype)  # [L,D,D]
         q = torch.einsum("blad,ldh->blah", x, w) + self.step_embed[t].to(device=x.device, dtype=x.dtype).view(1, 1, 1, self.dim)
         score = torch.einsum("blad,bed->blae", q, evidence) / math.sqrt(self.dim)
         input_attn = torch.softmax(score.float(), dim=-1).to(x.dtype)
         input_ctx = torch.einsum("blae,bed->blad", input_attn, evidence)
 
-        # stack groups: input + each source lane, then mix per target lane.
         lane_groups = x.unsqueeze(1).expand(-1, self.lanes, -1, -1, -1)  # [B,target,source,A,D]
         groups = torch.cat([input_ctx.unsqueeze(2), lane_groups], dim=2)  # [B,target,L+1,A,D]
 
@@ -241,10 +341,10 @@ class TapeLaneRouterBackbone(nn.Module):
 
     def forward(self, wav: torch.Tensor) -> Tuple[torch.Tensor, TapeLaneAux]:
         evidence = self.evidence(wav)
-        x = self.init_lanes(evidence)
+        x, lane_init_norm = self.init_lanes(evidence)
 
         all_slots = [x]
-        slot_names = [f"T0.{LANE_NAMES[l] if l < len(LANE_NAMES) else f'lane{l}'}.C{a}" for l in range(self.lanes) for a in range(self.cells_per_lane)]
+        slot_names = [f"T0.{lane_name(l)}.C{a}" for l in range(self.lanes) for a in range(self.cells_per_lane)]
         gate_list: List[torch.Tensor] = []
         update_norm_list: List[torch.Tensor] = []
         alive_list: List[torch.Tensor] = []
@@ -252,6 +352,7 @@ class TapeLaneRouterBackbone(nn.Module):
         route_list: List[torch.Tensor] = []
         route_entropy_list: List[torch.Tensor] = []
         read_group_list: List[torch.Tensor] = []
+        primitive_list: List[torch.Tensor] = []
         late_input_cost_terms: List[torch.Tensor] = []
 
         for t, unit in enumerate(self.units):
@@ -261,7 +362,7 @@ class TapeLaneRouterBackbone(nn.Module):
             route = torch.softmax(route_logits.float(), dim=-1).to(x.dtype)  # [from,to]
 
             read_packet, read_info = self.read_step(x, evidence, t)
-            update, _unit_info = unit(x, read_packet, self.lane_embed)
+            update, unit_info = unit(x, read_packet, self.lane_embed)
             write_gate = torch.sigmoid(self.write_gate_logit[t]).to(device=x.device, dtype=x.dtype).view(1, self.lanes, 1, 1)
 
             routed = torch.einsum("ft,bfad->btad", route, update)
@@ -269,9 +370,8 @@ class TapeLaneRouterBackbone(nn.Module):
 
             all_slots.append(x)
             for l in range(self.lanes):
-                lname = LANE_NAMES[l] if l < len(LANE_NAMES) else f"lane{l}"
                 for a in range(self.cells_per_lane):
-                    slot_names.append(f"T{t+1}.{lname}.C{a}")
+                    slot_names.append(f"T{t+1}.{lane_name(l)}.C{a}")
 
             gate_list.append(write_gate.expand(wav.shape[0], self.lanes, self.cells_per_lane, 1).squeeze(-1))
             update_norm_list.append(update.float().norm(dim=-1))
@@ -280,6 +380,7 @@ class TapeLaneRouterBackbone(nn.Module):
             route_list.append(route)
             route_entropy_list.append(entropy(route, dim=-1))
             read_group_list.append(read_info["group_mass"])
+            primitive_list.append(unit_info["primitive_weights"].to(device=x.device))
 
             depth_weight = torch.tensor(float(t + 1) / float(max(1, self.tape_steps)), device=x.device)
             late_input_cost_terms.append(depth_weight * read_info["input_mass"].to(x.device))
@@ -287,6 +388,7 @@ class TapeLaneRouterBackbone(nn.Module):
         slot_tensor = torch.stack(all_slots, dim=1)  # [B,T+1,L,A,D]
         flat_slots = slot_tensor.reshape(wav.shape[0], -1, self.dim)
         read_group = torch.stack(read_group_list, dim=0) if read_group_list else torch.empty(0, device=wav.device)
+        primitive_weights = torch.stack(primitive_list, dim=0) if primitive_list else torch.empty(0, self.lanes, len(PRIMITIVES), device=wav.device)
         late_input = torch.stack(late_input_cost_terms).mean() if late_input_cost_terms else torch.zeros((), device=wav.device)
         aux = TapeLaneAux(
             slots=flat_slots,
@@ -298,6 +400,8 @@ class TapeLaneRouterBackbone(nn.Module):
             routes=torch.stack(route_list, dim=0) if route_list else torch.empty(0, self.lanes, self.lanes, device=wav.device),
             route_entropy=torch.stack(route_entropy_list, dim=0) if route_entropy_list else torch.empty(0, self.lanes, device=wav.device),
             read_group_mass=read_group,
+            primitive_weights=primitive_weights,
+            lane_init_norm=lane_init_norm,
             late_input_read_mass=late_input,
         )
         return flat_slots, aux
@@ -446,7 +550,9 @@ def aux_losses(logits: torch.Tensor, baux: TapeLaneAux, haux: Dict[str, torch.Te
     target = torch.tensor(float(args.write_target), device=logits.device)
     alive_target = torch.tensor(float(args.step_alive_target), device=logits.device)
     boundary_target = torch.tensor(float(args.boundary_target), device=logits.device)
-    memory_gate = gate[:, :, min(args.lanes - 1, 3), :].mean() if gate.numel() else torch.zeros((), device=logits.device)
+    memory_lane = min(args.lanes - 1, 3)
+    memory_gate = gate[:, :, memory_lane, :].mean() if gate.numel() else torch.zeros((), device=logits.device)
+
     return {
         "write_budget": (gate.mean() - target).pow(2) if gate.numel() else torch.zeros((), device=logits.device),
         "update_alive": F.relu(torch.tensor(float(args.min_update_norm), device=logits.device) - upd.mean()).pow(2) if upd.numel() else torch.zeros((), device=logits.device),
@@ -468,6 +574,10 @@ def train_epoch(model, loader, opt, scaler, device, dtype, args, epoch: int):
     use_amp = device.startswith("cuda") and dtype != torch.float32
     totals = {"loss": 0.0, "ce": 0.0, "correct": 0, "n": 0}
     aux_sum: Dict[str, float] = {}
+    late_input_lambda = args.lambda_late_input_read
+    if epoch >= args.input_unlock_epoch:
+        late_input_lambda *= args.input_unlock_scale
+
     for step, (wav, y) in enumerate(loader, 1):
         if args.max_train_batches and step > args.max_train_batches:
             break
@@ -487,7 +597,7 @@ def train_epoch(model, loader, opt, scaler, device, dtype, args, epoch: int):
             loss = loss + args.lambda_route_entropy * losses["route_entropy_band"]
             loss = loss + args.lambda_step_alive_budget * losses["step_alive_budget"]
             loss = loss + args.lambda_boundary_budget * losses["boundary_budget"]
-            loss = loss + args.lambda_late_input_read * losses["late_input_read_cost"]
+            loss = loss + late_input_lambda * losses["late_input_read_cost"]
             loss = loss + args.lambda_memory_overwrite * losses["memory_overwrite_cost"]
             loss = loss + args.lambda_logit_norm * losses["logit_norm"]
         if not torch.isfinite(loss):
@@ -518,6 +628,7 @@ def train_epoch(model, loader, opt, scaler, device, dtype, args, epoch: int):
     out["acc"] = totals["correct"] / max(1, totals["n"])
     for k, v in aux_sum.items():
         out[k] = v / max(1, totals["n"])
+    out["late_input_lambda_effective"] = float(late_input_lambda)
     return out
 
 
@@ -556,26 +667,30 @@ def evaluate(model, loader, device, dtype, args):
         gates = baux.write_gates.float().mean(dim=(0, 3)).cpu() if baux.write_gates.numel() else torch.empty(0)
         updates = baux.update_norms.float().mean(dim=(0, 3)).cpu() if baux.update_norms.numel() else torch.empty(0)
         read_group = baux.read_group_mass.float().cpu() if baux.read_group_mass.numel() else torch.empty(0)
+        primitive_weights = baux.primitive_weights.float().cpu() if baux.primitive_weights.numel() else torch.empty(0)
         top_reads = _slot_top_reads(attn, baux.slot_names)
 
         last_report = {
-            "lane_names": list(LANE_NAMES[: args.lanes]),
-            "read_group_names": list(READ_GROUP_NAMES[: args.lanes + 1]),
+            "lane_names": [lane_name(i) for i in range(args.lanes)],
+            "read_group_names": [read_group_name(i) for i in range(args.lanes + 1)],
+            "primitive_names": list(PRIMITIVES),
+            "lane_init_norm": _to_float_list(baux.lane_init_norm),
             "step_alive": _to_float_list(baux.step_alive),
             "boundary": _to_float_list(baux.boundaries),
             "route_matrix": _to_float_list(baux.routes),
             "route_entropy": _to_float_list(baux.route_entropy),
             "read_group_mass": _to_float_list(read_group),
+            "primitive_weights": _to_float_list(primitive_weights),
             "write_gate_by_step_lane": _to_float_list(gates),
             "update_norm_by_step_lane": _to_float_list(updates),
             "late_input_read_mass": float(baux.late_input_read_mass.detach().float().cpu()),
             "class_top_reads": top_reads,
             "class_lane_mass": [
-                {LANE_NAMES[li] if li < len(LANE_NAMES) else f"lane{li}": float(lane_mass[ci, li]) for li in range(lane_mass.shape[1])}
+                {lane_name(li): float(lane_mass[ci, li]) for li in range(lane_mass.shape[1])}
                 for ci in range(lane_mass.shape[0])
             ],
             "lane_mass_mean": {
-                LANE_NAMES[li] if li < len(LANE_NAMES) else f"lane{li}": float(lane_mass[:, li].mean())
+                lane_name(li): float(lane_mass[:, li].mean())
                 for li in range(lane_mass.shape[1])
             },
             "pair_update_norm": float(haux["pair_update_norm"].detach().cpu()),
@@ -592,6 +707,8 @@ def write_chatgpt_report(out_dir: Path, analysis: Dict, args) -> None:
     route_entropy = rep.get("route_entropy", [])
     lane_mass = rep.get("lane_mass_mean", {})
     late_input = rep.get("late_input_read_mass", 0.0)
+    primitive_weights = rep.get("primitive_weights", [])
+    primitive_names = rep.get("primitive_names", [])
 
     active = [i for i, v in enumerate(step_alive) if float(v) >= 0.50]
     boundary_hot = [i for i, v in enumerate(boundaries) if float(v) >= 0.35]
@@ -600,6 +717,19 @@ def write_chatgpt_report(out_dir: Path, analysis: Dict, args) -> None:
         if row:
             ent_mean.append(sum(float(v) for v in row) / len(row))
     ent_text = ", ".join(f"T{i}:{v:.2f}" for i, v in enumerate(ent_mean[: args.tape_steps]))
+
+    prim_lines = []
+    for ti, step_pw in enumerate(primitive_weights[: args.tape_steps]):
+        if not step_pw:
+            continue
+        lane_parts = []
+        for li, lane_pw in enumerate(step_pw[: args.lanes]):
+            if not lane_pw:
+                continue
+            top_i = max(range(len(lane_pw)), key=lambda j: float(lane_pw[j]))
+            pname = primitive_names[top_i] if top_i < len(primitive_names) else str(top_i)
+            lane_parts.append(f"{lane_name(li)}={pname}:{float(lane_pw[top_i]):.2f}")
+        prim_lines.append(f"T{ti}: " + "; ".join(lane_parts))
 
     lines = [
         "REPORT_TO_CHATGPT",
@@ -614,8 +744,15 @@ def write_chatgpt_report(out_dir: Path, analysis: Dict, args) -> None:
         f"- Route entropy mean: {ent_text}",
         f"- Средняя class lane mass: {lane_mass}",
         "",
+        "Structured input:",
+        f"- lane_init_norm: {rep.get('lane_init_norm', [])}",
+        "",
+        "Primitive usage:",
+        *prim_lines[: args.tape_steps],
+        "",
         "Интерпретация:",
         "- Хорошо: не все route_matrix identity, class_lane_mass распределяется по нескольким lanes.",
+        "- Хорошо: primitive_weights отличаются между lanes/steps, а late_input_read_mass не доминирует.",
         "- Плохо: step_alive все одинаковые, boundary все 0/1, late_input_read_mass высокий, class_top_reads только из последних T.",
         "",
         "Артефакты:",
@@ -646,7 +783,7 @@ def run(args) -> None:
     params = sum(p.numel() for p in model.parameters())
     print(f"loaded datasets: train={len(train_loader.dataset)} val={len(val_loader.dataset)} classes={classes}", flush=True)
     print(
-        f"TapeLaneRouter params={params} T={args.tape_steps} lanes={args.lanes} "
+        f"TapeLaneRouter v4.1 params={params} T={args.tape_steps} lanes={args.lanes} "
         f"cells={args.cells_per_lane} D={args.dim} pairs={args.pair_slots} device={device} amp={args.amp}",
         flush=True,
     )
@@ -669,7 +806,7 @@ def run(args) -> None:
         "epoch", "train_loss", "train_ce", "train_acc", "val_loss", "val_acc", "best_acc",
         "write_budget", "update_alive", "class_read_div", "lane_balance", "slot_div",
         "route_entropy_band", "step_alive_budget", "boundary_budget", "late_input_read_cost",
-        "memory_overwrite_cost", "logit_norm", "pair_update_norm",
+        "late_input_lambda_effective", "memory_overwrite_cost", "logit_norm", "pair_update_norm",
     ]
     with (out_dir / "metrics.csv").open("w", newline="", encoding="utf-8") as f:
         csv.DictWriter(f, fieldnames=fields).writeheader()
@@ -703,6 +840,7 @@ def run(args) -> None:
             "step_alive_budget": tr.get("step_alive_budget", 0.0),
             "boundary_budget": tr.get("boundary_budget", 0.0),
             "late_input_read_cost": tr.get("late_input_read_cost", 0.0),
+            "late_input_lambda_effective": tr.get("late_input_lambda_effective", args.lambda_late_input_read),
             "memory_overwrite_cost": tr.get("memory_overwrite_cost", 0.0),
             "logit_norm": tr.get("logit_norm", 0.0),
             "pair_update_norm": tr.get("pair_update_norm", 0.0),
@@ -770,6 +908,8 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--route-entropy-max", type=float, default=1.35)
     p.add_argument("--step-alive-target", type=float, default=0.52)
     p.add_argument("--boundary-target", type=float, default=0.22)
+    p.add_argument("--input-unlock-epoch", type=int, default=999)
+    p.add_argument("--input-unlock-scale", type=float, default=0.25)
 
     p.add_argument("--lambda-write-budget", type=float, default=0.020)
     p.add_argument("--lambda-update-alive", type=float, default=0.004)

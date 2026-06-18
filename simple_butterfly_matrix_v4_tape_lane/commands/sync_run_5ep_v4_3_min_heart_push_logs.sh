@@ -7,7 +7,7 @@ echo "[v4.3 sync] git pull"
 git pull --ff-only
 
 TS="$(date +%Y%m%d_%H%M%S)"
-REPORT_DIR="${OUT_DIR:-simple_butterfly_matrix_v4_tape_lane/agent_reports/v4_3_min_heart_${TS}}"
+REPORT_DIR="${OUT_DIR:-simple_butterfly_matrix_v4_tape_lane/agent_reports/v4_3_context_controller_${TS}}"
 mkdir -p "$REPORT_DIR"
 
 DATA_ROOT="${DATA_ROOT:-../architecture_builder/data/speechcommands}"
@@ -24,7 +24,8 @@ DEVICE="${DEVICE:-cuda}"
 LOG_EVERY="${LOG_EVERY:-100}"
 MAX_TRAIN_BATCHES="${MAX_TRAIN_BATCHES:-0}"
 MAX_VAL_BATCHES="${MAX_VAL_BATCHES:-0}"
-COMPARE_TO="${COMPARE_TO:-v4.2_fixed_guided same seed/config or baseline_missing}"
+CONTEXT_CONTROLLER_SCALE="${CONTEXT_CONTROLLER_SCALE:-0.15}"
+COMPARE_TO="${COMPARE_TO:-v4.3_audit_fixed same seed/config or baseline_missing}"
 
 echo "[v4.3 sync] validate"
 bash simple_butterfly_matrix_v4_tape_lane/commands/validate_v4_3_min_heart.sh
@@ -32,10 +33,10 @@ bash simple_butterfly_matrix_v4_tape_lane/commands/validate_v4_3_min_heart.sh
 echo "[v4.3 sync] gradient sanity"
 OUT="$REPORT_DIR/grad_sanity.json" bash simple_butterfly_matrix_v4_tape_lane/commands/grad_sanity_v4_3_min_heart.sh | tee "$REPORT_DIR/grad_sanity.log"
 
-echo "[v4.3 sync] run audit-fixed wrapper -> $REPORT_DIR"
-echo "[v4.3 sync] speed cfg: batch=$BATCH_SIZE eval_batch=$EVAL_BATCH_SIZE workers=$WORKERS log_every=$LOG_EVERY max_train_batches=$MAX_TRAIN_BATCHES max_val_batches=$MAX_VAL_BATCHES" | tee "$REPORT_DIR/speed_config.txt"
+echo "[v4.3 sync] run context-controller wrapper -> $REPORT_DIR"
+echo "[v4.3 sync] speed cfg: batch=$BATCH_SIZE eval_batch=$EVAL_BATCH_SIZE workers=$WORKERS log_every=$LOG_EVERY max_train_batches=$MAX_TRAIN_BATCHES max_val_batches=$MAX_VAL_BATCHES context_scale=$CONTEXT_CONTROLLER_SCALE" | tee "$REPORT_DIR/speed_config.txt"
 set +e
-bash simple_butterfly_matrix_v4_tape_lane/commands/run_v4_3_min_heart_audit_fixed.sh \
+CONTEXT_CONTROLLER_SCALE="$CONTEXT_CONTROLLER_SCALE" bash simple_butterfly_matrix_v4_tape_lane/commands/run_v4_3_context_controller.sh \
   --data-root "$DATA_ROOT" \
   --epochs "$EPOCHS" \
   --train-limit "$TRAIN_LIMIT" \
@@ -92,11 +93,17 @@ STATUS="simple_butterfly_matrix_v4_tape_lane/AGENT_STATUS.md"
 cat > "$STATUS" <<EOF_STATUS
 # Agent Status
 
-Last run: v4.3_min_heart_audit_fixed
+Last run: v4.3_context_controller
 Timestamp: $TS
 Report dir: $REPORT_DIR
 Command: sync_run_5ep_v4_3_min_heart_push_logs.sh
 Run status: $RUN_STATUS
+
+Context controller:
+- enabled: true
+- scale: $CONTEXT_CONTROLLER_SCALE
+- affects: read_group, route, boundary, step_alive, write_gate
+- still observer-only: candidate deploy=false, no editor auto-deploy
 
 Speed config:
 - batch_size: $BATCH_SIZE
@@ -145,9 +152,11 @@ try:
     if detail > 0.55 and 'DETAIL_SHORTCUT' not in flags: flags.append('DETAIL_SHORTCUT')
     if mem_w < 0.03 and 'MEMORY_DEAD' not in flags: flags.append('MEMORY_DEAD')
     if mem_w > 0.30 and mem_c < 0.08 and 'MEMORY_JUNK' not in flags: flags.append('MEMORY_JUNK')
+    ctx = tr.get('context_controller') or {}
     with open(dst, 'a', encoding='utf-8') as f:
         f.write('\nSummary:\n')
         f.write(f"- best_acc: {float(data.get('best_acc', 0.0))*100:.2f}% @ epoch {data.get('best_epoch', 0)}\n")
+        f.write(f"- context_controller: {ctx}\n")
         f.write(f"- boundary_mean: {bm:.4f}\n")
         f.write(f"- route_entropy: {ent:.4f}\n")
         f.write(f"- detail_attention_mass: {detail:.4f}\n")
@@ -172,7 +181,7 @@ fi
 if git diff --cached --quiet; then
   echo "[v4.3 sync] no logs to commit"
 else
-  git commit -m "Add v4.3 min heart run logs $TS"
+  git commit -m "Add v4.3 context controller run logs $TS"
   git push
 fi
 

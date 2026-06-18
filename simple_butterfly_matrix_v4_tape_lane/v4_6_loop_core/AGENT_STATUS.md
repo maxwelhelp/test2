@@ -3,8 +3,8 @@
 Current stage: v4.6.1 grouped real-data loop core
 Entrypoint: simple_butterfly_matrix_v4_tape_lane/v4_6_loop_core/tape_lane_transport_v4_6_1_grouped_core.py
 Smoke status: pass
-Timestamp: 20260619_011028
-Report dir: simple_butterfly_matrix_v4_tape_lane/agent_reports/v4_6_1_grouped_real_20260619_011028
+Timestamp: 20260619_012515
+Report dir: simple_butterfly_matrix_v4_tape_lane/agent_reports/v4_6_1_grouped_real_20260619_012515
 Run status: 0
 
 Evidence rules:
@@ -16,12 +16,12 @@ Closed-loop invariant:
 - The controller decision affects execution, execution affects loss, loss gradient updates the controller decision path.
 
 Known remaining issues:
-- inspect grouped/context/credit reports in simple_butterfly_matrix_v4_tape_lane/agent_reports/v4_6_1_grouped_real_20260619_011028
+- inspect grouped/context/credit reports in simple_butterfly_matrix_v4_tape_lane/agent_reports/v4_6_1_grouped_real_20260619_012515
 
 Summary:
-- best_acc: 74.15% @ epoch 5
-- boundary_mean/peaks: 0.2790/1
-- route_entropy/self/useful: 0.3827/0.2523/0.4304
-- primitive_entropy/top1/neg_sign: 1.8288/0.2500/0.5037
-- memory_write/read/influence: 6.2460/5.8160/3.3169
-- collapse_flags: NONE
+- best_acc: 10.55% @ epoch 1
+- boundary_mean/peaks: 0.2341/0
+- route_entropy/self/useful: 1.1451/0.2595/0.3393
+- primitive_entropy/top1/neg_sign: 2.1162/0.8438/0.3188
+- memory_write/read/influence: 6.4629/0.9637/0.0907
+- collapse_flags: BOUNDARY_DEAD

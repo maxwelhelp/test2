@@ -1,0 +1,63 @@
+REPORT_TO_CHATGPT
+
+Версия: v4.3_min_heart
+Лучший val_acc: 45.30% @ epoch 6
+Текущий epoch/window: 7
+compare_to: v4.2_fixed_guided same seed/config or baseline_missing
+
+Главное по v4.3:
+- Это НЕ actor/critic/planner и НЕ auto-deploy.
+- Это costed paths + trace + deterministic candidate suggestions.
+- Последовательность должна возникать через разные tape positions, boundary peaks и изменение route/read/primitive по t.
+
+Route / boundary:
+- route_entropy_mean: 1.2443
+- boundary_mean: 0.2800
+- boundary_flatness/std: 0.0000
+- boundary_peak_count: 0 peaks=[]
+- offdiag_outside_boundary_cost: 0.3894
+- self_route_mass: 0.4591
+- useful_transition_mass: 0.1646
+- allowed/disallowed_route_mass: 0.6237/0.3763
+- boundary_soft_peak_count: 1.7766
+- collapse_flags: BOUNDARY_DEAD
+
+Sequence:
+- active tape steps step_alive>=0.50: [0, 1, 2, 3, 4, 5, 6]
+- sequence_nonflat_score: 0.0417
+
+Shortcuts / memory:
+- late_input_cost: 0.0807
+- detail_attention_mass: 0.2715
+- detail_topread_share(report-only): 0.9421
+- memory_write_mean: 0.5894
+- memory_consumer_proxy: 0.4268
+
+Candidate suggestions:
+- boundary increase boundary_peak_contrast at {'t': 'all'} | boundary is flat or has no hard peaks; program stages are not separated | deploy=False
+- route decrease offdiag_outside_boundary at {'t': 0} | cross-lane routing is high outside boundary | deploy=False
+- route decrease offdiag_outside_boundary at {'t': 1} | cross-lane routing is high outside boundary | deploy=False
+- route decrease offdiag_outside_boundary at {'t': 2} | cross-lane routing is high outside boundary | deploy=False
+- route decrease offdiag_outside_boundary at {'t': 3} | cross-lane routing is high outside boundary | deploy=False
+- route decrease offdiag_outside_boundary at {'t': 4} | cross-lane routing is high outside boundary | deploy=False
+- route decrease offdiag_outside_boundary at {'t': 5} | cross-lane routing is high outside boundary | deploy=False
+- route decrease offdiag_outside_boundary at {'t': 6} | cross-lane routing is high outside boundary | deploy=False
+
+Артефакты:
+- metrics.csv
+- analysis_epoch_XXX.json
+- trace_feedback_epoch_XXX.json
+- candidate_suggestions_epoch_XXX.json
+- final_report.json
+- train.log если запускался sync script
+
+Context-controller diagnostics:
+- context_controller_active: True scale=0.055
+- self_route_mass: 0.4591
+- useful_transition_mass: 0.1646
+- collapse_flags: BOUNDARY_DEAD
+- read/route/boundary/write receive context projections from current lane state, evidence and memory.
+- primitive_controller is active inside transform units and biases primitive/operator choice from lane/read/memory/step/route context.
+- boundary_mean_target: 0.280; boundary route_gate_scale=0.250.
+- alive_controller_scale: 0.000 (0.0 means disabled by default).
+- fast eval computes loss/accuracy on all validation batches, but builds heavy trace/report once from last validation batch.

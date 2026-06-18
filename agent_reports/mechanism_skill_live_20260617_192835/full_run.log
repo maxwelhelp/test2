@@ -1,0 +1,1038 @@
+
+[mechanism] repo=/home/maxwelhelp/test/sience/experiments/math_search/WORKING_BEST/test2
+[mechanism] report_dir=agent_reports/mechanism_skill_live_20260617_192835
+[mechanism] dataset=/home/maxwelhelp/test/sience/experiments/math_search/WORKING_BEST/test/matrix_program_core/runs/code_real_decode_20260617_072934/code_only_build/code_context_dataset.pt
+[mechanism] init_assembler=
+[mechanism] epochs_mech=5 epochs_audio=25 modes=editor_delta freeze_core
+
+
+[mechanism] using MECH_CKPT_OVERRIDE=/home/maxwelhelp/test/sience/experiments/math_search/WORKING_BEST/test/matrix_program_core/runs/mechanism_skill_20260617_085250/assembler_mechanism_skill_best.pt
+{
+  "source_checkpoint": "/home/maxwelhelp/test/sience/experiments/math_search/WORKING_BEST/test/matrix_program_core/runs/mechanism_skill_20260617_085250/assembler_mechanism_skill_best.pt",
+  "tag": "mechanism_skill",
+  "base_path": "agent_reports/mechanism_skill_live_20260617_192835/exported_checkpoints/mechanism_skill_assembler_skill_base.pt",
+  "delta_path": "agent_reports/mechanism_skill_live_20260617_192835/exported_checkpoints/mechanism_skill_assembler_skill_delta.pt",
+  "task_path": "agent_reports/mechanism_skill_live_20260617_192835/exported_checkpoints/mechanism_skill_task_adapter_head.pt",
+  "base_params": 1575256,
+  "context_base_params": 34944,
+  "mechanism_base_params": 20736,
+  "base_plus_context_params": 1630936,
+  "delta_params": 737200,
+  "task_params": 0,
+  "base_keys": 542,
+  "context_base_keys": 13,
+  "mechanism_base_keys": 23,
+  "delta_keys": 184,
+  "task_keys": 0,
+  "meta": {
+    "args": {
+      "dataset": "matrix_program_core/runs/code_real_decode_20260617_072934/code_only_build/code_context_dataset.pt",
+      "out_dir": "matrix_program_core/runs/mechanism_skill_20260617_085250",
+      "init_assembler": "matrix_program_core/runs/code_real_decode_20260617_073803/skill_train/assembler_code_context_best.pt",
+      "device": "cuda",
+      "amp": "fp32",
+      "seed": 42,
+      "dim": 96,
+      "evidence_cells": 48,
+      "steps_core": 2,
+      "memory_cells": 4,
+      "global_cells": 2,
+      "channel_stages": 3,
+      "dropout": 0.04,
+      "task_context_tokens": 4,
+      "head_context_tokens": 10,
+      "epochs": 8,
+      "batch_size": 128,
+      "eval_batch_size": 256,
+      "workers": 2,
+      "pin_memory": true,
+      "train_frac": 0.85,
+      "lr": 0.0003,
+      "weight_decay": 0.01,
+      "grad_clip": 0.75,
+      "visible_consistency": 0.15,
+      "feedback_noise_max": 0.7,
+      "feedback_quality_min": 0.2,
+      "feedback_noise_std": 0.03,
+      "feedback_importance": 1.5,
+      "lambda_entropy_keep": 0.01,
+      "min_entropy": 0.55,
+      "w_read": 0.25,
+      "w_primitive": 0.35,
+      "w_slot_transition": 0.2,
+      "w_primitive_transition": 0.3,
+      "w_composition": 0.12,
+      "w_write": 0.25,
+      "log_every": 50
+    },
+    "epoch": 5,
+    "best_val_loss": 0.2912779160340627,
+    "config": {
+      "dim": 96,
+      "evidence_cells": 48,
+      "layers": 4,
+      "blocks": 4,
+      "steps": 2,
+      "primitive_slots": 4,
+      "memory_cells": 4,
+      "global_cells": 2,
+      "channel_stages": 3,
+      "dropout": 0.04,
+      "use_deltas": true
+    },
+    "meta": {
+      "source_dataset": "matrix_program_core/runs/code_real_decode_20260617_072934/code_only_build/code_context_dataset.pt",
+      "skill": "mechanism_flow_masked",
+      "task_families": [
+        "primitive_from_io",
+        "operators_from_primitives",
+        "read_write_from_ops",
+        "write_from_read_primitive",
+        "full_denoise"
+      ],
+      "pack_meta": {
+        "n": 2000,
+        "parse_files": [
+          "matrix_program_core/__init__.py",
+          "matrix_program_core/assembler_core.py",
+          "matrix_program_core/checkpoint_split.py",
+          "matrix_program_core/real_decode_to_flow_pack.py",
+          "matrix_program_core/task_context_v2.py",
+          "matrix_program_core/train_assembler_code_context_pretrain.py",
+          "matrix_program_core/train_assembler_context_skill_pretrain.py",
+          "matrix_program_core/train_assembler_multitask_pretrain.py",
+          "matrix_program_core/train_assembler_multitask_pretrain_fast.py",
+          "matrix_program_core/train_assembler_pretrain.py",
+          "matrix_program_core/train_core_pretrain.py",
+          "matrix_program_core/transfer_audio_assembler.py",
+          "matrix_program_core/transfer_audio_v4.py",
+          "matrix_program_core/universal_core.py"
+        ],
+        "skeleton_kind": "pytorch_like",
+        "skeleton": {
+          "source_files": [
+            "matrix_program_core/__init__.py",
+            "matrix_program_core/assembler_core.py",
+            "matrix_program_core/checkpoint_split.py",
+            "matrix_program_core/real_decode_to_flow_pack.py",
+            "matrix_program_core/task_context_v2.py",
+            "matrix_program_core/train_assembler_code_context_pretrain.py",
+            "matrix_program_core/train_assembler_context_skill_pretrain.py",
+            "matrix_program_core/train_assembler_multitask_pretrain.py",
+            "matrix_program_core/train_assembler_multitask_pretrain_fast.py",
+            "matrix_program_core/train_assembler_pretrain.py",
+            "matrix_program_core/train_core_pretrain.py",
+            "matrix_program_core/transfer_audio_assembler.py",
+            "matrix_program_core/transfer_audio_v4.py",
+            "matrix_program_core/universal_core.py"
+          ],
+          "detected_classes": [
+            "AssemblerConfig",
+            "AssemblerAux",
+            "AssemblerStep",
+            "MatrixProgramAssemblerCore",
+            "TaskContextV2Config",
+            "TaskIOContextEncoder",
+            "CodeContextDataset",
+            "CodeContextEvidenceBuilder",
+            "ContextSkillDataset",
+            "ContextEvidenceBuilder",
+            "MultiTaskAssemblerDataset",
+            "MultiTaskHead",
+            "SyntheticAssemblerTask",
+            "SyntheticAssemblerHead",
+            "SyntheticEvidenceProgramTask",
+            "SyntheticProgramHead",
+            "AudioAssemblerHead",
+            "AudioAssemblerModel",
+            "MatrixProgramTaskHead",
+            "AudioMatrixProgramV4",
+            "ProgramCoreConfig",
+            "CoreAux",
+            "UniversalMatrixProgramStep",
+            "UniversalMatrixProgramCore"
+          ],
+          "detected_functions": [
+            "AssemblerConfig.address_cells",
+            "<module>._entropy",
+            "AssemblerStep.__init__",
+            "AssemblerStep._state_idx",
+            "AssemblerStep._memory_start",
+            "AssemblerStep._global_start",
+            "AssemblerStep._read_prior",
+            "AssemblerStep._write_prior",
+            "AssemblerStep._primitive_slot_prior",
+            "AssemblerStep._slot_transition_prior",
+            "AssemblerStep._primitive_transition_prior",
+            "AssemblerStep._primitive_transition_prior.link",
+            "AssemblerStep._eff",
+            "AssemblerStep._context_flow_bias",
+            "AssemblerStep._primitive_outputs",
+            "AssemblerStep.forward",
+            "MatrixProgramAssemblerCore.__init__",
+            "MatrixProgramAssemblerCore.config_dict",
+            "MatrixProgramAssemblerCore.cell_names",
+            "MatrixProgramAssemblerCore.set_delta_mode",
+            "MatrixProgramAssemblerCore.freeze_for_mode",
+            "MatrixProgramAssemblerCore.init_cells",
+            "MatrixProgramAssemblerCore.forward",
+            "<module>.flow_kl",
+            "<module>.assembler_skill_loss",
+            "<module>.ensure_dir",
+            "<module>.is_delta_key",
+            "<module>.is_task_specific_model_key",
+            "<module>.strip_prefix",
+            "<module>.count_params",
+            "<module>.prefixed_state",
+            "<module>.get_core_state",
+            "<module>.get_context_base_state",
+            "<module>.get_context_task_state",
+            "<module>.split_core_base_delta",
+            "<module>.split_model_task_state",
+            "<module>.meta_from_ckpt",
+            "<module>.export_split",
+            "<module>.parser",
+            "<module>.read_jsonl",
+            "<module>.terms_to_prims",
+            "<module>.role_contract",
+            "<module>.rec_to_flows",
+            "<module>.build_pack",
+            "<module>.main",
+            "TaskIOContextEncoder.__init__",
+            "TaskIOContextEncoder._id_tensor",
+            "TaskIOContextEncoder._num_tensor",
+            "TaskIOContextEncoder.forward",
+            "<module>.set_seed",
+            "<module>.ensure_dir",
+            "<module>.write_json",
+            "<module>.write_jsonl",
+            "<module>.load_old_v3_module",
+            "<module>.parse_old_code",
+            "<module>.soft_one",
+            "<module>.add_to_dist",
+            "<module>.normalize_last",
+            "<module>.read_distribution",
+            "<module>.primitive_distribution",
+            "<module>.primitive_transition_distribution",
+            "<module>.slot_transition_distribution",
+            "<module>.write_distribution",
+            "<module>.record_to_flow_targets",
+            "<module>.infer_contract",
+            "CodeContextDataset.__init__",
+            "CodeContextDataset.__len__",
+            "CodeContextDataset.__getitem__",
+            "CodeContextEvidenceBuilder.__init__",
+            "CodeContextEvidenceBuilder.forward",
+            "<module>.build_code_context_pack",
+            "<module>.make_context_tokens",
+            "<module>.targets_from_batch",
+            "<module>.run_epoch",
+            "<module>.run",
+            "<module>.parser",
+            "<module>.set_seed",
+            "<module>.ensure_dir",
+            "<module>.write_json",
+            "ContextSkillDataset.__init__",
+            "ContextSkillDataset.__len__",
+            "ContextSkillDataset.__getitem__",
+            "ContextEvidenceBuilder.__init__",
+            "ContextEvidenceBuilder.forward",
+            "<module>._maybe_vector",
+            "<module>.make_context_tokens",
+            "<module>.train_or_eval",
+            "<module>.run",
+            "<module>.parser",
+            "<module>.parse_csv_names",
+            "<module>.set_seed",
+            "<module>.ensure_dir",
+            "<module>.write_json",
+            "MultiTaskAssemblerDataset.__init__",
+            "MultiTaskAssemblerDataset.__len__",
+            "MultiTaskAssemblerDataset._ids",
+            "MultiTaskAssemblerDataset.__getitem__",
+            "MultiTaskHead.__init__",
+            "MultiTaskHead.forward",
+            "<module>._add_prim",
+            "<module>._link",
+            "<module>.build_multitask_flow_targets",
+            "build_multitask_flow_targets.norm",
+            "<module>.entropy_report",
+            "<module>.evaluate",
+            "<module>.run",
+            "<module>.parser",
+            "<module>._cfg_key",
+            "<module>._build_bank",
+            "<module>.build_multitask_flow_targets_fast",
+            "<module>.set_seed",
+            "<module>.ensure_dir",
+            "<module>.write_json",
+            "SyntheticAssemblerTask.__init__",
+            "SyntheticAssemblerTask.__len__",
+            "SyntheticAssemblerTask.__getitem__",
+            "SyntheticAssemblerHead.__init__",
+            "SyntheticAssemblerHead.forward",
+            "<module>._one_hot_soft",
+            "<module>.build_flow_targets",
+            "<module>.flow_entropy_report",
+            "<module>.evaluate",
+            "<module>.run",
+            "<module>.parser",
+            "<module>.set_seed",
+            "<module>.ensure_dir",
+            "<module>.write_json",
+            "SyntheticEvidenceProgramTask.__init__",
+            "SyntheticEvidenceProgramTask.__len__",
+            "SyntheticEvidenceProgramTask.__getitem__",
+            "SyntheticProgramHead.__init__",
+            "SyntheticProgramHead.forward",
+            "<module>.build_skill_targets",
+            "build_skill_targets.add",
+            "build_skill_targets.link",
+            "<module>.evaluate",
+            "<module>.run",
+            "<module>.parser",
+            "AudioAssemblerHead.__init__",
+            "AudioAssemblerHead.forward",
+            "AudioAssemblerModel.__init__",
+            "AudioAssemblerModel.forward",
+            "<module>.trainable_summary",
+            "<module>.configure_train_mode",
+            "<module>._is_tensor_state",
+            "<module>._strip_prefix_state",
+            "<module>._extract_core_state",
+            "<module>._extract_task_context_state",
+            "<module>._normalize_flow_target",
+            "<module>.load_skill_target_pack",
+            "<module>.build_prior_flow_targets",
+            "<module>.make_runtime_flow_targets",
+            "<module>.aux_losses",
+            "<module>.train_epoch",
+            "<module>.evaluate",
+            "<module>.run",
+            "<module>.parser",
+            "MatrixProgramTaskHead.__init__",
+            "MatrixProgramTaskHead.forward",
+            "AudioMatrixProgramV4.__init__",
+            "AudioMatrixProgramV4.forward",
+            "<module>.trainable_summary",
+            "<module>.configure_train_mode",
+            "<module>.aux_losses",
+            "<module>.train_epoch",
+            "<module>.evaluate",
+            "<module>.run",
+            "<module>.parser",
+            "UniversalMatrixProgramStep.__init__",
+            "UniversalMatrixProgramStep._primitive_prior",
+            "UniversalMatrixProgramStep._variant_prior",
+            "UniversalMatrixProgramStep._pair_prior",
+            "UniversalMatrixProgramStep._pair_prior.link",
+            "UniversalMatrixProgramStep._effective",
+            "UniversalMatrixProgramStep._primitive_outputs",
+            "UniversalMatrixProgramStep.forward",
+            "UniversalMatrixProgramCore.__init__",
+            "UniversalMatrixProgramCore.config_dict",
+            "UniversalMatrixProgramCore.set_delta_mode",
+            "UniversalMatrixProgramCore.freeze_for_mode",
+            "UniversalMatrixProgramCore._block_init",
+            "UniversalMatrixProgramCore._context",
+            "UniversalMatrixProgramCore.forward",
+            "<module>.core_skill_loss"
+          ],
+          "constants": {
+            "PHASES": [
+              "extract",
+              "compare",
+              "suppress",
+              "aggregate"
+            ]
+          },
+          "init_defaults": {
+            "skeleton_kinds": 8,
+            "extra_tokens": 8,
+            "holdout_mod": 0,
+            "holdout_rem": 0,
+            "seed": 0,
+            "use_deltas": 1
+          },
+          "call_counts": {
+            "int": 105,
+            "clamp_min": 36,
+            "float": 179,
+            "sum": 58,
+            "log": 5,
+            "__init__": 14,
+            "super": 14,
+            "min": 11,
+            "len": 92,
+            "ChannelButterfly": 2,
+            "BlockButterfly": 2,
+            "max": 84,
+            "Parameter": 55,
+            "randn": 41,
+            "full": 40,
+            "_read_prior": 1,
+            "_primitive_slot_prior": 1,
+            "_slot_transition_prior": 1,
+            "_primitive_transition_prior": 1,
+            "zeros": 29,
+            "_write_prior": 1,
+            "Linear": 28,
+            "zeros_": 2,
+            "Dropout": 10,
+            "LayerNorm": 17,
+            "_memory_start": 2,
+            "_global_start": 2,
+            "range": 58,
+            "_state_idx": 4,
+            "randn_like": 5,
+            "enumerate": 25,
+            "get": 105,
+            "list": 49,
+            "abs": 8,
+            "repeat": 1,
+            "view": 42,
+            "eye": 8,
+            "link": 24,
+            "mean": 53,
+            "zeros_like": 2,
+            "to": 121,
+            "ctx_flow": 1,
+            "ctx_flow_delta": 1,
+            "split": 14,
+            "reshape": 9,
+            "channel": 3,
+            "tanh": 3,
+            "permute": 2,
+            "block": 3,
+            "sigmoid": 6,
+            "stack": 26,
+            "_eff": 6,
+            "_context_flow_bias": 1,
+            "softmax": 17,
+            "unsqueeze": 15,
+            "einsum": 25,
+            "_primitive_outputs": 2,
+            "norm": 23,
+            "drop": 7,
+            "squeeze": 19,
+            "detach": 86,
+            "_entropy": 5,
+            "ModuleList": 2,
+            "AssemblerStep": 1,
+            "extend": 4,
+            "bool": 12,
+            "str": 48,
+            "set_delta_mode": 4,
+            "parameters": 41,
+            "named_parameters": 4,
+            "endswith": 4,
+            "ValueError": 9,
+            "evidence_norm": 1,
+            "sqrt": 8,
+            "cell_norm": 1,
+            "tuple": 4,
+            "init_cells": 1,
+            "step": 8,
+            "append": 34,
+            "cat": 10,
+            "tensor": 31,
+            "AssemblerAux": 1,
+            "items": 36,
+            "cell_names": 1,
+            "expand_as": 4,
+            "kl_div": 3,
+            "flow_kl": 6,
+            "Path": 22,
+            "mkdir": 7,
+            "any": 2,
+            "startswith": 37,
+            "values": 11,
+            "is_tensor": 5,
+            "numel": 45,
+            "isinstance": 11,
+            "strip_prefix": 1,
+            "KeyError": 2,
+            "prefixed_state": 1,
+            "is_delta_key": 2,
+            "is_task_specific_model_key": 1,
+            "update": 14,
+            "get_context_task_state": 1,
+            "ensure_dir": 8,
+            "load": 12,
+            "get_core_state": 1,
+            "split_core_base_delta": 1,
+            "get_context_base_state": 1,
+            "dict": 7,
+            "split_model_task_state": 1,
+            "meta_from_ckpt": 1,
+            "save": 19,
+            "count_params": 8,
+            "write_text": 6,
+            "dumps": 9,
+            "ArgumentParser": 9,
+            "add_argument": 322,
+            "parse_args": 10,
+            "parser": 9,
+            "export_split": 1,
+            "print": 42,
+            "resolve": 9,
+            "insert": 9,
+            "open": 16,
+            "strip": 3,
+            "loads": 1,
+            "lower": 8,
+            "set": 1,
+            "add": 5,
+            "terms_to_prims": 1,
+            "read_distribution": 3,
+            "slot_transition_distribution": 3,
+            "write_distribution": 3,
+            "primitive_transition_distribution": 3,
+            "zip": 1,
+            "normalize_last": 15,
+            "rec_to_flows": 1,
+            "role_contract": 1,
+            "AssemblerConfig": 6,
+            "read_jsonl": 1,
+            "build_pack": 1,
+            "main": 1,
+            "Embedding": 8,
+            "Sequential": 5,
+            "GELU": 5,
+            "expand": 10,
+            "role": 1,
+            "_id_tensor": 5,
+            "input_kind": 1,
+            "output_kind": 1,
+            "loss_kind": 1,
+            "readout_kind": 1,
+            "_num_tensor": 4,
+            "log1p": 1,
+            "numeric_proj": 1,
+            "head_proj": 1,
+            "seed": 5,
+            "manual_seed": 11,
+            "is_available": 12,
+            "manual_seed_all": 5,
+            "write": 1,
+            "is_dir": 1,
+            "exists": 2,
+            "FileNotFoundError": 1,
+            "spec_from_file_location": 1,
+            "RuntimeError": 3,
+            "module_from_spec": 1,
+            "exec_module": 1,
+            "resolve_parse_files": 1,
+            "parse_code_files": 1,
+            "add_to_dist": 21,
+            "primitive_distribution": 2,
+            "getattr": 16,
+            "join": 7,
+            "keys": 3,
+            "long": 2,
+            "skeleton_kind": 1,
+            "load_old_v3_module": 1,
+            "parse_old_code": 1,
+            "MatrixOpLibrary": 1,
+            "StructuredSynthesizer": 1,
+            "time": 12,
+            "sample_one": 1,
+            "infer_contract": 1,
+            "record_to_flow_targets": 1,
+            "cpu": 68,
+            "hasattr": 2,
+            "task_context": 3,
+            "contiguous": 2,
+            "transpose": 1,
+            "train": 14,
+            "zero_grad": 7,
+            "set_grad_enabled": 2,
+            "autocast": 12,
+            "make_context_tokens": 2,
+            "evidence_builder": 2,
+            "core": 9,
+            "assembler_skill_loss": 7,
+            "targets_from_batch": 1,
+            "pow": 11,
+            "relu": 5,
+            "backward": 7,
+            "scale": 7,
+            "unscale_": 7,
+            "clip_grad_norm_": 7,
+            "set_seed": 7,
+            "device": 9,
+            "set_float32_matmul_precision": 7,
+            "build_code_context_pack": 1,
+            "write_jsonl": 1,
+            "write_json": 10,
+            "randperm": 1,
+            "tolist": 3,
+            "DataLoader": 10,
+            "CodeContextDataset": 2,
+            "MatrixProgramAssemblerCore": 5,
+            "TaskIOContextEncoder": 3,
+            "TaskContextV2Config": 3,
+            "CodeContextEvidenceBuilder": 1,
+            "load_state_dict": 12,
+            "AdamW": 7,
+            "GradScaler": 7,
+            "writeheader": 7,
+            "DictWriter": 14,
+            "run_epoch": 2,
+            "no_grad": 7,
+            "state_dict": 32,
+            "vars": 20,
+            "writerow": 7,
+            "run": 8,
+            "Random": 1,
+            "random": 1,
+            "task": 1,
+            "solution": 1,
+            "mix": 3,
+            "_maybe_vector": 11,
+            "build_multitask_flow_targets": 3,
+            "parse_csv_names": 4,
+            "ContextEvidenceBuilder": 1,
+            "ContextSkillDataset": 2,
+            "train_or_eval": 2,
+            "Generator": 6,
+            "normalize": 24,
+            "linspace": 6,
+            "_ids": 1,
+            "exp": 3,
+            "sin": 3,
+            "cos": 3,
+            "roll": 1,
+            "std": 3,
+            "key": 4,
+            "value": 5,
+            "classifier": 2,
+            "recon": 3,
+            "item": 2,
+            "fromkeys": 1,
+            "_link": 15,
+            "eval": 8,
+            "head": 8,
+            "cross_entropy": 10,
+            "mse_loss": 6,
+            "argmax": 10,
+            "entropy_report": 1,
+            "MultiTaskHead": 1,
+            "MultiTaskAssemblerDataset": 2,
+            "clone": 4,
+            "evaluate": 5,
+            "_cfg_key": 1,
+            "_slow_build": 1,
+            "_build_bank": 1,
+            "index_select": 1,
+            "flow_entropy_report": 1,
+            "SyntheticAssemblerHead": 1,
+            "SyntheticAssemblerTask": 2,
+            "build_flow_targets": 2,
+            "cls": 1,
+            "core_skill_loss": 3,
+            "ProgramCoreConfig": 2,
+            "UniversalMatrixProgramCore": 2,
+            "SyntheticProgramHead": 1,
+            "SyntheticEvidenceProgramTask": 2,
+            "build_skill_targets": 2,
+            "MatrixEvidence": 2,
+            "AudioAssemblerHead": 1,
+            "input_adapter": 2,
+            "assembler_core": 1,
+            "freeze_for_mode": 2,
+            "all": 1,
+            "TypeError": 1,
+            "_is_tensor_state": 3,
+            "_strip_prefix_state": 5,
+            "_normalize_flow_target": 1,
+            "load_skill_target_pack": 1,
+            "sorted": 1,
+            "build_prior_flow_targets": 1,
+            "model": 4,
+            "aux_losses": 4,
+            "isfinite": 2,
+            "amp_dtype": 2,
+            "make_loaders": 2,
+            "AudioAssemblerModel": 1,
+            "_extract_core_state": 1,
+            "_extract_task_context_state": 1,
+            "configure_train_mode": 2,
+            "trainable_summary": 2,
+            "make_runtime_flow_targets": 1,
+            "train_epoch": 2,
+            "MatrixProgramTaskHead": 1,
+            "empty": 8,
+            "AudioMatrixProgramV4": 1,
+            "_primitive_prior": 1,
+            "_variant_prior": 1,
+            "_pair_prior": 1,
+            "_effective": 4,
+            "UniversalMatrixProgramStep": 1,
+            "_block_init": 1,
+            "_context": 1,
+            "unit": 1,
+            "CoreAux": 1,
+            "flatten": 2
+          },
+          "L": 4,
+          "N": 3,
+          "S": 3,
+          "K": 3,
+          "primitive_names": [
+            "noop",
+            "identity",
+            "keep_state",
+            "small_refine",
+            "mlp",
+            "matrix_mlp",
+            "compare",
+            "memory_read",
+            "global_read",
+            "normalize",
+            "suppress"
+          ],
+          "transition_names": [
+            "keep",
+            "replace",
+            "residual",
+            "norm_residual",
+            "product_gate",
+            "compare_mix"
+          ],
+          "read_names": [
+            "state",
+            "input",
+            "prev_step",
+            "all_prev_steps",
+            "layer_route",
+            "global",
+            "memory",
+            "task"
+          ],
+          "route_names": [
+            "input",
+            "prev_same_block",
+            "prev_layer_mean",
+            "global_mean",
+            "memory_mean"
+          ],
+          "skeleton_kind": "pytorch_like",
+          "notes": [
+            "Detected PyTorch-like operations; using generic neural skeleton."
+          ]
+        },
+        "ast_records": 2306,
+        "core_primitives": [
+          "channel_butterfly",
+          "block_butterfly",
+          "low_rank",
+          "ctx_matrix",
+          "product_gate",
+          "phase_matrix"
+        ],
+        "truth_level": "code_context_matrix_program_flow_targets"
+      }
+    },
+    "source_checkpoint": "/home/maxwelhelp/test/sience/experiments/math_search/WORKING_BEST/test/matrix_program_core/runs/mechanism_skill_20260617_085250/assembler_mechanism_skill_best.pt",
+    "tag": "mechanism_skill"
+  }
+}
+
+[mechanism] live audio transfer mode=editor_delta
+loaded assembler checkpoint: /home/maxwelhelp/test/sience/experiments/math_search/WORKING_BEST/test/matrix_program_core/runs/mechanism_skill_20260617_085250/assembler_mechanism_skill_best.pt missing=0 unexpected=0
+loaded task_context from assembler checkpoint missing=0 unexpected=0
+loaded datasets: train=12000 val=2000 classes=['yes', 'no', 'up', 'down', 'left', 'right', 'on', 'off', 'stop', 'go']
+AudioAssemblerModel params={'total': 2447538, 'trainable': 158842, 'core_total': 2312456, 'core_trainable': 58704, 'task_context_total': 34944, 'task_context_trainable': 0, 'mechanism_context_total': 0, 'mechanism_context_trainable': 0} mode=editor_delta device=cuda amp=fp32
+loaded skill target pack: /home/maxwelhelp/test/sience/experiments/math_search/WORKING_BEST/test/matrix_program_core/runs/code_real_decode_20260617_072934/code_only_build/code_context_dataset.pt keys=['primitive_slot_flow', 'primitive_transition_flow', 'read_flow', 'slot_composition_flow', 'slot_transition_flow', 'write_flow']
+epoch 001 step 00025 loss=2.3774 ce=2.2899 acc=12.06%
+epoch 001 step 00050 loss=2.3497 ce=2.2623 acc=13.53%
+epoch 001 step 00075 loss=2.3285 ce=2.2411 acc=15.03%
+epoch 001/25 train=2.3131/16.17% val=2.1443/22.60% best=22.60%@1 skill=0.0783
+epoch 002 step 00025 loss=2.2017 ce=2.1143 acc=22.94%
+epoch 002 step 00050 loss=2.1716 ce=2.0842 acc=24.33%
+epoch 002 step 00075 loss=2.1550 ce=2.0676 acc=24.68%
+epoch 002/25 train=2.1370/25.62% val=1.9695/28.10% best=28.10%@2 skill=0.0990
+epoch 003 step 00025 loss=2.0498 ce=1.9622 acc=28.34%
+epoch 003 step 00050 loss=2.0496 ce=1.9620 acc=28.52%
+epoch 003 step 00075 loss=2.0281 ce=1.9405 acc=29.43%
+epoch 003/25 train=2.0220/29.47% val=1.8856/30.35% best=30.35%@3 skill=0.1114
+epoch 004 step 00025 loss=1.9595 ce=1.8719 acc=32.53%
+epoch 004 step 00050 loss=1.9691 ce=1.8814 acc=31.95%
+epoch 004 step 00075 loss=1.9525 ce=1.8649 acc=32.51%
+epoch 004/25 train=1.9467/32.63% val=1.8285/31.85% best=31.85%@4 skill=0.1191
+epoch 005 step 00025 loss=1.9046 ce=1.8169 acc=34.97%
+epoch 005 step 00050 loss=1.8991 ce=1.8114 acc=34.80%
+epoch 005 step 00075 loss=1.8909 ce=1.8032 acc=34.93%
+epoch 005/25 train=1.8925/34.91% val=1.7384/35.50% best=35.50%@5 skill=0.1294
+epoch 006 step 00025 loss=1.8294 ce=1.7417 acc=37.34%
+epoch 006 step 00050 loss=1.8428 ce=1.7550 acc=37.08%
+epoch 006 step 00075 loss=1.8280 ce=1.7402 acc=37.57%
+epoch 006/25 train=1.8245/37.64% val=1.6887/38.75% best=38.75%@6 skill=0.1435
+epoch 007 step 00025 loss=1.7699 ce=1.6821 acc=38.91%
+epoch 007 step 00050 loss=1.7781 ce=1.6902 acc=38.38%
+epoch 007 step 00075 loss=1.7710 ce=1.6831 acc=38.70%
+epoch 007/25 train=1.7647/39.19% val=1.7082/38.65% best=38.75%@6 skill=0.1461
+epoch 008 step 00025 loss=1.7117 ce=1.6237 acc=41.44%
+epoch 008 step 00050 loss=1.7244 ce=1.6364 acc=41.05%
+epoch 008 step 00075 loss=1.7171 ce=1.6291 acc=40.93%
+epoch 008/25 train=1.7178/40.78% val=1.5605/43.65% best=43.65%@8 skill=0.1495
+epoch 009 step 00025 loss=1.6785 ce=1.5903 acc=42.72%
+epoch 009 step 00050 loss=1.6724 ce=1.5842 acc=42.89%
+epoch 009 step 00075 loss=1.6597 ce=1.5715 acc=43.47%
+epoch 009/25 train=1.6558/43.63% val=1.4931/44.20% best=44.20%@9 skill=0.1505
+epoch 010 step 00025 loss=1.5999 ce=1.5116 acc=44.78%
+epoch 010 step 00050 loss=1.6166 ce=1.5282 acc=44.53%
+epoch 010 step 00075 loss=1.6216 ce=1.5332 acc=44.16%
+epoch 010/25 train=1.6156/44.56% val=1.4548/45.60% best=45.60%@10 skill=0.1511
+epoch 011 step 00025 loss=1.5666 ce=1.4781 acc=46.31%
+epoch 011 step 00050 loss=1.5751 ce=1.4866 acc=45.94%
+epoch 011 step 00075 loss=1.5740 ce=1.4854 acc=46.12%
+epoch 011/25 train=1.5760/46.23% val=1.4073/47.75% best=47.75%@11 skill=0.1610
+epoch 012 step 00025 loss=1.5196 ce=1.4310 acc=49.34%
+epoch 012 step 00050 loss=1.5355 ce=1.4469 acc=48.20%
+epoch 012 step 00075 loss=1.5416 ce=1.4530 acc=47.96%
+epoch 012/25 train=1.5402/47.83% val=1.3961/48.35% best=48.35%@12 skill=0.1550
+epoch 013 step 00025 loss=1.5184 ce=1.4296 acc=47.94%
+epoch 013 step 00050 loss=1.5300 ce=1.4412 acc=47.48%
+epoch 013 step 00075 loss=1.5214 ce=1.4326 acc=47.68%
+epoch 013/25 train=1.5173/47.88% val=1.3440/51.10% best=51.10%@13 skill=0.1564
+epoch 014 step 00025 loss=1.4974 ce=1.4084 acc=49.28%
+epoch 014 step 00050 loss=1.4944 ce=1.4053 acc=48.98%
+epoch 014 step 00075 loss=1.4951 ce=1.4061 acc=49.32%
+epoch 014/25 train=1.4919/49.22% val=1.3288/50.30% best=51.10%@13 skill=0.1538
+epoch 015 step 00025 loss=1.4612 ce=1.3722 acc=50.69%
+epoch 015 step 00050 loss=1.4541 ce=1.3650 acc=50.52%
+epoch 015 step 00075 loss=1.4604 ce=1.3714 acc=50.35%
+epoch 015/25 train=1.4615/50.39% val=1.2759/53.15% best=53.15%@15 skill=0.1491
+epoch 016 step 00025 loss=1.4405 ce=1.3512 acc=51.12%
+epoch 016 step 00050 loss=1.4416 ce=1.3524 acc=51.02%
+epoch 016 step 00075 loss=1.4389 ce=1.3496 acc=50.85%
+epoch 016/25 train=1.4392/50.68% val=1.2751/53.40% best=53.40%@16 skill=0.1530
+epoch 017 step 00025 loss=1.4021 ce=1.3128 acc=52.72%
+epoch 017 step 00050 loss=1.3959 ce=1.3065 acc=53.39%
+epoch 017 step 00075 loss=1.4116 ce=1.3222 acc=52.62%
+epoch 017/25 train=1.4175/52.23% val=1.2590/55.70% best=55.70%@17 skill=0.1476
+epoch 018 step 00025 loss=1.3852 ce=1.2957 acc=53.16%
+epoch 018 step 00050 loss=1.3982 ce=1.3089 acc=52.53%
+epoch 018 step 00075 loss=1.3999 ce=1.3105 acc=52.33%
+epoch 018/25 train=1.4051/52.04% val=1.2583/54.70% best=55.70%@17 skill=0.1475
+epoch 019 step 00025 loss=1.3685 ce=1.2790 acc=53.59%
+epoch 019 step 00050 loss=1.3807 ce=1.2912 acc=53.14%
+epoch 019 step 00075 loss=1.3873 ce=1.2978 acc=52.91%
+epoch 019/25 train=1.3866/53.21% val=1.2058/56.25% best=56.25%@19 skill=0.1421
+epoch 020 step 00025 loss=1.3839 ce=1.2944 acc=54.31%
+epoch 020 step 00050 loss=1.3888 ce=1.2992 acc=53.11%
+epoch 020 step 00075 loss=1.3841 ce=1.2946 acc=53.28%
+epoch 020/25 train=1.3834/53.08% val=1.1924/56.15% best=56.25%@19 skill=0.1447
+epoch 021 step 00025 loss=1.3731 ce=1.2835 acc=53.84%
+epoch 021 step 00050 loss=1.3592 ce=1.2696 acc=53.84%
+epoch 021 step 00075 loss=1.3562 ce=1.2665 acc=53.88%
+epoch 021/25 train=1.3587/53.80% val=1.1648/58.25% best=58.25%@21 skill=0.1479
+epoch 022 step 00025 loss=1.3304 ce=1.2408 acc=54.72%
+epoch 022 step 00050 loss=1.3371 ce=1.2474 acc=54.62%
+epoch 022 step 00075 loss=1.3382 ce=1.2485 acc=54.59%
+epoch 022/25 train=1.3400/54.64% val=1.1880/56.10% best=58.25%@21 skill=0.1438
+epoch 023 step 00025 loss=1.3143 ce=1.2245 acc=54.94%
+epoch 023 step 00050 loss=1.3265 ce=1.2367 acc=55.08%
+epoch 023 step 00075 loss=1.3282 ce=1.2384 acc=54.80%
+epoch 023/25 train=1.3299/55.02% val=1.2169/54.75% best=58.25%@21 skill=0.1395
+epoch 024 step 00025 loss=1.3143 ce=1.2246 acc=54.81%
+epoch 024 step 00050 loss=1.3205 ce=1.2307 acc=54.80%
+epoch 024 step 00075 loss=1.3273 ce=1.2375 acc=55.02%
+epoch 024/25 train=1.3196/55.31% val=1.1657/57.10% best=58.25%@21 skill=0.1423
+epoch 025 step 00025 loss=1.3241 ce=1.2342 acc=54.59%
+epoch 025 step 00050 loss=1.3225 ce=1.2325 acc=54.58%
+epoch 025 step 00075 loss=1.3183 ce=1.2284 acc=55.06%
+epoch 025/25 train=1.3106/55.38% val=1.1328/58.45% best=58.45%@25 skill=0.1434
+{
+  "source_checkpoint": "matrix_program_core/runs/mechanism_audio_20260617_192835/editor_delta/best.pt",
+  "tag": "audio_editor_delta",
+  "base_path": "agent_reports/mechanism_skill_live_20260617_192835/exported_checkpoints/audio_editor_delta_assembler_skill_base.pt",
+  "delta_path": "agent_reports/mechanism_skill_live_20260617_192835/exported_checkpoints/audio_editor_delta_assembler_skill_delta.pt",
+  "task_path": "agent_reports/mechanism_skill_live_20260617_192835/exported_checkpoints/audio_editor_delta_task_adapter_head.pt",
+  "base_params": 1575256,
+  "context_base_params": 0,
+  "mechanism_base_params": 0,
+  "base_plus_context_params": 1575256,
+  "delta_params": 737200,
+  "task_params": 148346,
+  "base_keys": 542,
+  "context_base_keys": 0,
+  "mechanism_base_keys": 0,
+  "delta_keys": 184,
+  "task_keys": 33,
+  "meta": {
+    "args": {
+      "synthetic": false,
+      "synthetic_length": 512,
+      "data_root": "../architecture_builder/data/speechcommands",
+      "download": false,
+      "classes": "yes,no,up,down,left,right,on,off,stop,go",
+      "train_limit": 12000,
+      "val_limit": 2000,
+      "seconds": 1.0,
+      "sample_rate": 16000,
+      "n_mels": 64,
+      "hop_length": 160,
+      "dim": 96,
+      "evidence_cells": 48,
+      "layers": 4,
+      "blocks": 4,
+      "steps": 2,
+      "primitive_slots": 4,
+      "memory_cells": 4,
+      "global_cells": 2,
+      "channel_stages": 3,
+      "dropout": 0.04,
+      "head_dropout": 0.05,
+      "epochs": 25,
+      "batch_size": 128,
+      "eval_batch_size": 256,
+      "workers": 4,
+      "pin_memory": true,
+      "lr": 0.0002,
+      "weight_decay": 0.012,
+      "grad_clip": 0.75,
+      "write_target": 0.44,
+      "min_update_norm": 0.2,
+      "lambda_skill": 0.0,
+      "lambda_write_budget": 0.025,
+      "lambda_update_alive": 0.005,
+      "lambda_class_read_div": 0.12,
+      "lambda_slot_div": 0.02,
+      "lambda_logit_norm": 0.0007,
+      "w_read": 0.25,
+      "w_primitive": 0.3,
+      "w_slot_transition": 0.2,
+      "w_primitive_transition": 0.25,
+      "w_composition": 0.15,
+      "w_write": 0.25,
+      "amp": "fp32",
+      "device": "cuda",
+      "seed": 42,
+      "max_train_batches": 0,
+      "max_val_batches": 0,
+      "log_every": 25,
+      "out_dir": "matrix_program_core/runs/mechanism_audio_20260617_192835/editor_delta",
+      "assembler_checkpoint": "/home/maxwelhelp/test/sience/experiments/math_search/WORKING_BEST/test/matrix_program_core/runs/mechanism_skill_20260617_085250/assembler_mechanism_skill_best.pt",
+      "init_checkpoint": "",
+      "skill_target_pack": "/home/maxwelhelp/test/sience/experiments/math_search/WORKING_BEST/test/matrix_program_core/runs/code_real_decode_20260617_072934/code_only_build/code_context_dataset.pt",
+      "use_prior_skill_targets": false,
+      "train_mode": "editor_delta",
+      "task_context_tokens": 4,
+      "head_context_tokens": 10,
+      "use_head_context": true,
+      "use_mechanism_context": false,
+      "mechanism_task_id": 4,
+      "train_input_adapter": true,
+      "train_head": true,
+      "train_task_context": false,
+      "num_classes": 10
+    },
+    "classes": [
+      "yes",
+      "no",
+      "up",
+      "down",
+      "left",
+      "right",
+      "on",
+      "off",
+      "stop",
+      "go"
+    ],
+    "epoch": 25,
+    "best_acc": 0.5845,
+    "config": {
+      "dim": 96,
+      "evidence_cells": 48,
+      "layers": 4,
+      "blocks": 4,
+      "steps": 2,
+      "primitive_slots": 4,
+      "memory_cells": 4,
+      "global_cells": 2,
+      "channel_stages": 3,
+      "dropout": 0.04,
+      "use_deltas": true
+    },
+    "trainable_summary": {
+      "total": 2447538,
+      "trainable": 158842,
+      "core_total": 2312456,
+      "core_trainable": 58704,
+      "task_context_total": 34944,
+      "task_context_trainable": 0,
+      "mechanism_context_total": 0,
+      "mechanism_context_trainable": 0
+    },
+    "source_checkpoint": "matrix_program_core/runs/mechanism_audio_20260617_192835/editor_delta/best.pt",
+    "tag": "audio_editor_delta"
+  }
+}
+
+[mechanism] live audio transfer mode=freeze_core
+loaded assembler checkpoint: /home/maxwelhelp/test/sience/experiments/math_search/WORKING_BEST/test/matrix_program_core/runs/mechanism_skill_20260617_085250/assembler_mechanism_skill_best.pt missing=0 unexpected=0
+loaded task_context from assembler checkpoint missing=0 unexpected=0
+loaded datasets: train=12000 val=2000 classes=['yes', 'no', 'up', 'down', 'left', 'right', 'on', 'off', 'stop', 'go']
+AudioAssemblerModel params={'total': 2447538, 'trainable': 100138, 'core_total': 2312456, 'core_trainable': 0, 'task_context_total': 34944, 'task_context_trainable': 0, 'mechanism_context_total': 0, 'mechanism_context_trainable': 0} mode=freeze_core device=cuda amp=fp32
+loaded skill target pack: /home/maxwelhelp/test/sience/experiments/math_search/WORKING_BEST/test/matrix_program_core/runs/code_real_decode_20260617_072934/code_only_build/code_context_dataset.pt keys=['primitive_slot_flow', 'primitive_transition_flow', 'read_flow', 'slot_composition_flow', 'slot_transition_flow', 'write_flow']
+epoch 001 step 00025 loss=2.3774 ce=2.2899 acc=12.06%
+epoch 001 step 00050 loss=2.3497 ce=2.2623 acc=13.53%
+epoch 001 step 00075 loss=2.3285 ce=2.2411 acc=15.03%
+epoch 001/25 train=2.3131/16.17% val=2.1443/22.60% best=22.60%@1 skill=0.0783
+epoch 002 step 00025 loss=2.2017 ce=2.1143 acc=22.94%
+epoch 002 step 00050 loss=2.1716 ce=2.0842 acc=24.33%
+epoch 002 step 00075 loss=2.1550 ce=2.0676 acc=24.68%
+epoch 002/25 train=2.1370/25.62% val=1.9695/28.10% best=28.10%@2 skill=0.0990
+epoch 003 step 00025 loss=2.0498 ce=1.9623 acc=28.34%
+epoch 003 step 00050 loss=2.0496 ce=1.9620 acc=28.53%
+epoch 003 step 00075 loss=2.0281 ce=1.9406 acc=29.44%
+epoch 003/25 train=2.0220/29.48% val=1.8857/30.35% best=30.35%@3 skill=0.1115
+epoch 004 step 00025 loss=1.9595 ce=1.8719 acc=32.53%
+epoch 004 step 00050 loss=1.9691 ce=1.8814 acc=31.94%
+epoch 004 step 00075 loss=1.9526 ce=1.8649 acc=32.51%
+epoch 004/25 train=1.9468/32.63% val=1.8286/31.85% best=31.85%@4 skill=0.1192
+epoch 005 step 00025 loss=1.9046 ce=1.8169 acc=34.97%
+epoch 005 step 00050 loss=1.8991 ce=1.8114 acc=34.80%
+epoch 005 step 00075 loss=1.8909 ce=1.8031 acc=34.92%
+epoch 005/25 train=1.8925/34.90% val=1.7383/35.45% best=35.45%@5 skill=0.1295
+epoch 006 step 00025 loss=1.8294 ce=1.7416 acc=37.34%
+epoch 006 step 00050 loss=1.8427 ce=1.7549 acc=37.08%
+epoch 006 step 00075 loss=1.8279 ce=1.7401 acc=37.56%
+epoch 006/25 train=1.8244/37.64% val=1.6886/38.75% best=38.75%@6 skill=0.1436
+epoch 007 step 00025 loss=1.7700 ce=1.6821 acc=38.91%
+epoch 007 step 00050 loss=1.7781 ce=1.6902 acc=38.38%
+epoch 007 step 00075 loss=1.7710 ce=1.6830 acc=38.70%
+epoch 007/25 train=1.7647/39.20% val=1.7082/38.65% best=38.75%@6 skill=0.1462
+epoch 008 step 00025 loss=1.7117 ce=1.6237 acc=41.44%
+epoch 008 step 00050 loss=1.7244 ce=1.6364 acc=41.05%
+epoch 008 step 00075 loss=1.7171 ce=1.6290 acc=40.95%
+epoch 008/25 train=1.7178/40.80% val=1.5604/43.70% best=43.70%@8 skill=0.1496
+epoch 009 step 00025 loss=1.6785 ce=1.5904 acc=42.72%
+epoch 009 step 00050 loss=1.6724 ce=1.5842 acc=42.91%
+epoch 009 step 00075 loss=1.6597 ce=1.5714 acc=43.48%
+epoch 009/25 train=1.6558/43.64% val=1.4930/44.15% best=44.15%@9 skill=0.1506
+epoch 010 step 00025 loss=1.5999 ce=1.5116 acc=44.78%
+epoch 010 step 00050 loss=1.6165 ce=1.5282 acc=44.53%
+epoch 010 step 00075 loss=1.6216 ce=1.5332 acc=44.16%
+epoch 010/25 train=1.6155/44.56% val=1.4548/45.60% best=45.60%@10 skill=0.1512
+epoch 011 step 00025 loss=1.5666 ce=1.4781 acc=46.31%
+epoch 011 step 00050 loss=1.5751 ce=1.4865 acc=45.94%
+epoch 011 step 00075 loss=1.5740 ce=1.4854 acc=46.14%
+epoch 011/25 train=1.5760/46.23% val=1.4072/47.70% best=47.70%@11 skill=0.1612
+epoch 012 step 00025 loss=1.5196 ce=1.4309 acc=49.38%
+epoch 012 step 00050 loss=1.5355 ce=1.4468 acc=48.23%
+epoch 012 step 00075 loss=1.5416 ce=1.4529 acc=47.98%
+epoch 012/25 train=1.5402/47.85% val=1.3960/48.40% best=48.40%@12 skill=0.1551
+epoch 013 step 00025 loss=1.5184 ce=1.4296 acc=47.94%
+epoch 013 step 00050 loss=1.5300 ce=1.4411 acc=47.48%
+epoch 013 step 00075 loss=1.5214 ce=1.4325 acc=47.70%
+epoch 013/25 train=1.5172/47.89% val=1.3440/51.10% best=51.10%@13 skill=0.1565
+epoch 014 step 00025 loss=1.4974 ce=1.4083 acc=49.25%
+epoch 014 step 00050 loss=1.4944 ce=1.4053 acc=48.97%
+epoch 014 step 00075 loss=1.4951 ce=1.4061 acc=49.31%
+epoch 014/25 train=1.4920/49.21% val=1.3288/50.35% best=51.10%@13 skill=0.1540
+epoch 015 step 00025 loss=1.4612 ce=1.3722 acc=50.69%
+epoch 015 step 00050 loss=1.4541 ce=1.3650 acc=50.52%

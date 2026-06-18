@@ -1,0 +1,16 @@
+# mechanism skill live summary
+
+## audio_editor_delta
+best_acc: 0.5895
+best_epoch: 25
+trainable_summary: {'total': 2447539, 'trainable': 158843, 'core_total': 2312456, 'core_trainable': 58704, 'task_context_total': 34944, 'task_context_trainable': 0, 'mechanism_context_total': 0, 'mechanism_context_trainable': 0}
+
+## audio_freeze_core
+best_acc: 0.5895
+best_epoch: 25
+trainable_summary: {'total': 2447539, 'trainable': 100139, 'core_total': 2312456, 'core_trainable': 0, 'task_context_total': 34944, 'task_context_trainable': 0, 'mechanism_context_total': 0, 'mechanism_context_trainable': 0}
+
+## split reports
+audio_editor_delta_split_report.json {'base_params': 1575256, 'context_base_params': 0, 'delta_params': 737200, 'task_params': 148347, 'base_keys': 542, 'context_base_keys': 0, 'delta_keys': 184, 'task_keys': 34}
+audio_freeze_core_split_report.json {'base_params': 1575256, 'context_base_params': 0, 'delta_params': 737200, 'task_params': 148347, 'base_keys': 542, 'context_base_keys': 0, 'delta_keys': 184, 'task_keys': 34}
+mechanism_skill_split_report.json {'base_params': 1575256, 'context_base_params': 34944, 'delta_params': 737200, 'task_params': 0, 'base_keys': 542, 'context_base_keys': 13, 'delta_keys': 184, 'task_keys': 0}

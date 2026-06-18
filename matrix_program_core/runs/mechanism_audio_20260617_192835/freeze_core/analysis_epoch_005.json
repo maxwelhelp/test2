@@ -1,0 +1,101 @@
+{
+  "epoch": 5,
+  "train": {
+    "loss": 1.892490714708964,
+    "ce": 1.8047641350428263,
+    "n": 1.0,
+    "acc": 0.349,
+    "read_flow_kl": 0.04548125573992729,
+    "primitive_slot_kl": 0.02615776219467322,
+    "slot_transition_kl": 0.013603434577584266,
+    "primitive_transition_kl": 0.38154438885053,
+    "slot_composition_kl": 0.005635759823024273,
+    "write_flow_kl": 0.045217494865258535,
+    "skill": 0.12947416480382284,
+    "write_budget": 0.0005367713165469468,
+    "update_alive": 0.0,
+    "class_read_div": 0.6748913310368856,
+    "slot_div": 0.2968471271197001,
+    "logit_norm": 1.1274444646835327
+  },
+  "val": {
+    "loss": 1.7382907447814941,
+    "acc": 0.3545,
+    "n": 2000,
+    "report": {
+      "skill": 0.1286732256412506,
+      "write_gate_mean": 0.46316832304000854,
+      "update_norm_mean": 9.778042793273926,
+      "memory_usage": 0.3312574028968811,
+      "global_usage": 0.18236011266708374,
+      "entropy": {
+        "read": 2.211639881134033,
+        "primitive": 1.769830584526062,
+        "slot_transition": 1.3428667783737183,
+        "primitive_transition": 1.7325557470321655,
+        "write": 2.145780563354492
+      },
+      "slot_count": 32,
+      "cell_names": [
+        "state.B0",
+        "state.B1",
+        "state.B2",
+        "state.B3",
+        "memory.M0",
+        "memory.M1",
+        "memory.M2",
+        "memory.M3",
+        "global.G0",
+        "global.G1"
+      ]
+    }
+  },
+  "best_acc": 0.3545,
+  "best_epoch": 5,
+  "classes": [
+    "yes",
+    "no",
+    "up",
+    "down",
+    "left",
+    "right",
+    "on",
+    "off",
+    "stop",
+    "go"
+  ],
+  "train_counts": {
+    "yes": 1200,
+    "no": 1200,
+    "up": 1200,
+    "down": 1200,
+    "left": 1200,
+    "right": 1200,
+    "on": 1200,
+    "off": 1200,
+    "stop": 1200,
+    "go": 1200
+  },
+  "val_counts": {
+    "yes": 200,
+    "no": 200,
+    "up": 200,
+    "down": 200,
+    "left": 200,
+    "right": 200,
+    "on": 200,
+    "off": 200,
+    "stop": 200,
+    "go": 200
+  },
+  "trainable_summary": {
+    "total": 2447538,
+    "trainable": 100138,
+    "core_total": 2312456,
+    "core_trainable": 0,
+    "task_context_total": 34944,
+    "task_context_trainable": 0,
+    "mechanism_context_total": 0,
+    "mechanism_context_trainable": 0
+  }
+}

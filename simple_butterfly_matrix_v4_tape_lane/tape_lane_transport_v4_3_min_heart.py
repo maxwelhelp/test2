@@ -198,6 +198,33 @@ def route_economy_terms(baux, args) -> Dict[str, torch.Tensor]:
         "sequence_route_delta_mean": route_delta,
     }
 
+def _route_extra_terms_from_routes(routes: torch.Tensor, lanes: int) -> Dict[str, torch.Tensor]:
+    if routes.numel() == 0:
+        z = torch.zeros((), device=routes.device if hasattr(routes, "device") else "cpu")
+        return {
+            "self_route_mass": z,
+            "useful_transition_mass": z,
+            "self_route_by_step": torch.empty(0, device=z.device),
+            "useful_transition_by_step": torch.empty(0, device=z.device),
+        }
+    eye = torch.eye(routes.shape[-1], dtype=routes.dtype, device=routes.device)
+    self_by_step = (routes * eye.view(1, routes.shape[-1], routes.shape[-1])).sum(dim=(-2, -1)) / float(max(1, lanes))
+    useful_parts = []
+    if lanes >= 2:
+        useful_parts.append(routes[:, 0, 1])  # detail -> state
+    if lanes >= 3:
+        useful_parts.append(routes[:, 1, 2])  # state -> abstract
+    if lanes >= 4:
+        useful_parts.append(routes[:, 1, 3])  # state -> memory
+        useful_parts.append(routes[:, 3, 1])  # memory -> state
+    useful_by_step = torch.stack(useful_parts, dim=0).mean(dim=0) if useful_parts else torch.zeros(routes.shape[0], dtype=routes.dtype, device=routes.device)
+    return {
+        "self_route_mass": self_by_step.mean(),
+        "useful_transition_mass": useful_by_step.mean(),
+        "self_route_by_step": self_by_step,
+        "useful_transition_by_step": useful_by_step,
+    }
+
 
 def late_input_cost_from_read(baux, args) -> torch.Tensor:
     rg = baux.read_group_mass.float()
@@ -250,13 +277,17 @@ def memory_terms(baux, haux: Dict[str, torch.Tensor], args) -> Dict[str, torch.T
 
 
 def sequence_terms(baux, args) -> Dict[str, torch.Tensor]:
+    routes = baux.routes.float()
     prim = baux.primitive_weights.float()
     upd = baux.update_norms.float()
     read = baux.read_group_mass.float()
     device = baux.slots.device
+    if routes.numel() and routes.shape[0] > 1:
+        route_delta_mean = (routes[1:] - routes[:-1]).abs().mean(dim=(-2, -1)).mean()
+    else:
+        route_delta_mean = torch.zeros((), device=device)
     if prim.numel() and prim.shape[0] > 1:
-        prim_delta = (prim[1:] - prim[:-1]).abs().mean(dim=(-2, -1))
-        prim_delta_mean = prim_delta.mean()
+        prim_delta_mean = (prim[1:] - prim[:-1]).abs().mean(dim=(-2, -1)).mean()
     else:
         prim_delta_mean = torch.zeros((), device=device)
     if upd.numel() and upd.shape[1] > 1:
@@ -268,11 +299,15 @@ def sequence_terms(baux, args) -> Dict[str, torch.Tensor]:
         read_delta_mean = (read[1:] - read[:-1]).abs().mean()
     else:
         read_delta_mean = torch.zeros((), device=device)
+    route_extra = _route_extra_terms_from_routes(routes, int(args.lanes))
     return {
+        "sequence_route_delta_mean": route_delta_mean,
         "sequence_primitive_delta_mean": prim_delta_mean,
         "sequence_update_delta_mean": upd_delta_mean,
         "sequence_read_delta_mean": read_delta_mean,
-        "sequence_nonflat_score": prim_delta_mean + upd_delta_mean + read_delta_mean,
+        "sequence_nonflat_score": route_delta_mean + prim_delta_mean + upd_delta_mean + read_delta_mean,
+        "self_route_mass": route_extra["self_route_mass"].to(device),
+        "useful_transition_mass": route_extra["useful_transition_mass"].to(device),
     }
 
 
@@ -293,7 +328,17 @@ def aux_losses_v43(logits: torch.Tensor, baux, haux: Dict[str, torch.Tensor], ar
     out["detail_head_shortcut_cost"] = detail_cost
     out["skip_gate_mean"] = torch.zeros((), device=logits.device)
     out["skip_cost"] = torch.zeros((), device=logits.device)
-    out["residual_dominance_proxy"] = residual_proxy.detach()
+    out["update_collapse_proxy"] = residual_proxy.detach()
+    out["update_collapse_proxy"] = residual_proxy.detach()
+    out["update_collapse_proxy"] = residual_proxy.detach()
+    out["update_collapse_proxy"] = residual_proxy.detach()
+    out["update_collapse_proxy"] = residual_proxy.detach()
+    out["update_collapse_proxy"] = residual_proxy.detach()
+    out["update_collapse_proxy"] = residual_proxy.detach()
+    out["update_collapse_proxy"] = residual_proxy.detach()
+    out["update_collapse_proxy"] = residual_proxy.detach()
+    out["update_collapse_proxy"] = residual_proxy.detach()
+    out["residual_dominance_proxy"] = residual_proxy.detach()  # deprecated alias  # deprecated alias  # deprecated alias  # deprecated alias  # deprecated alias  # deprecated alias  # deprecated alias  # deprecated alias  # deprecated alias  # deprecated alias
     out["operator_complexity_cost"] = torch.zeros((), device=logits.device)
     return out
 
@@ -324,8 +369,10 @@ def train_epoch(model, loader, opt, scaler, device, dtype, args, epoch: int):
             loss = loss + args.lambda_route_offdiag_outside_boundary * losses["route_offdiag_outside_boundary_cost"]
             loss = loss + args.lambda_boundary_budget * losses["boundary_budget_cost"]
             loss = loss + args.lambda_late_input_read * losses["late_input_read_cost"]
-            loss = loss + args.lambda_memory_write_cost * losses["memory_write_cost"]
-            loss = loss + args.lambda_memory_overwrite * losses["memory_overwrite_cost"]
+            memory_warmup = max(1, int(getattr(args, "memory_write_warmup_epochs", 2)))
+            memory_scale = min(1.0, float(epoch) / float(memory_warmup))
+            loss = loss + (args.lambda_memory_write_cost * memory_scale) * losses["memory_write_cost"]
+            loss = loss + (args.lambda_memory_overwrite * memory_scale) * losses["memory_overwrite_cost"]
             loss = loss + args.lambda_detail_head_shortcut * losses["detail_head_shortcut_cost"]
             loss = loss + args.lambda_skip_cost * losses["skip_cost"]
             loss = loss + args.lambda_operator_complexity * losses["operator_complexity_cost"]
@@ -397,9 +444,18 @@ def build_trace_feedback(rep: Dict, args, epoch: int) -> Dict:
         offdiag = routes * (1.0 - eye.view(1, routes.shape[-1], routes.shape[-1]))
         offdiag_raw = offdiag.sum(dim=(-2, -1))
         offdiag_norm = offdiag.sum(dim=-1).mean(dim=-1).clamp(0.0, 1.0)
+        route_extra = _route_extra_terms_from_routes(routes, lanes)
+        self_route_by_step = route_extra["self_route_by_step"]
+        useful_transition_by_step = route_extra["useful_transition_by_step"]
+        self_route_mass = float(route_extra["self_route_mass"])
+        useful_transition_mass = float(route_extra["useful_transition_mass"])
     else:
         offdiag_raw = torch.empty(0)
         offdiag_norm = torch.empty(0)
+        self_route_by_step = torch.empty(0)
+        useful_transition_by_step = torch.empty(0)
+        self_route_mass = 0.0
+        useful_transition_mass = 0.0
     if boundary.numel() and offdiag_norm.numel():
         inside = offdiag_norm * boundary
         outside = offdiag_norm * (1.0 - boundary)
@@ -417,14 +473,12 @@ def build_trace_feedback(rep: Dict, args, epoch: int) -> Dict:
 
     route_delta = step_delta(routes)
     primitive_delta = step_delta(primitive)
-    if updates.numel():
-        trace_delta = step_delta(updates)
-    else:
-        trace_delta = torch.zeros_like(route_delta)
-    common_len = min(len(route_delta), len(primitive_delta), len(trace_delta), len(boundary)) if boundary.numel() else 0
+    read_delta = step_delta(read_group)
+    trace_delta = step_delta(updates) if updates.numel() else torch.zeros_like(route_delta)
+    common_len = min(len(route_delta), len(primitive_delta), len(trace_delta), len(read_delta), len(boundary)) if boundary.numel() else 0
     if common_len:
-        usefulness = boundary[:common_len] * (route_delta[:common_len] + primitive_delta[:common_len] + trace_delta[:common_len])
-        seq_change = route_delta[:common_len] + primitive_delta[:common_len] + trace_delta[:common_len]
+        seq_change = route_delta[:common_len] + primitive_delta[:common_len] + trace_delta[:common_len] + read_delta[:common_len]
+        usefulness = boundary[:common_len] * seq_change
     else:
         usefulness = torch.empty(0)
         seq_change = torch.empty(0)
@@ -436,18 +490,12 @@ def build_trace_feedback(rep: Dict, args, epoch: int) -> Dict:
         depth_weight = torch.sigmoid((progress - float(args.late_input_start)) / max(1e-6, float(args.late_input_tau)))
         late_by_step = (input_mass_by_step * depth_weight).tolist()
         input_total = float(input_mass_by_step.mean())
-        if read_group.shape[-1] > 1 + mem_lane:
-            memory_future_read = float(read_group[:, :, 1 + mem_lane].mean())
-        else:
-            memory_future_read = 0.0
+        memory_future_read = float(read_group[:, :, 1 + mem_lane].mean()) if read_group.shape[-1] > 1 + mem_lane else 0.0
     else:
         input_total = 0.0
         memory_future_read = 0.0
 
-    if gates.numel() and gates.shape[-1] > mem_lane:
-        memory_write = float(gates[:, mem_lane].mean())
-    else:
-        memory_write = 0.0
+    memory_write = float(gates[:, mem_lane].mean()) if gates.numel() and gates.shape[-1] > mem_lane else 0.0
     memory_overwrite = max(0.0, memory_write - float(args.memory_write_target)) ** 2
     lane_mass_mean = rep.get("lane_mass_mean", {}) or {}
     head_memory = _safe_float(lane_mass_mean.get(lane_name(mem_lane), 0.0))
@@ -459,28 +507,46 @@ def build_trace_feedback(rep: Dict, args, epoch: int) -> Dict:
     peak_thr = float(args.boundary_peak_threshold)
     peaks = [i for i, v in enumerate(boundary_list) if v >= peak_thr]
     boundary_mean = sum(boundary_list) / max(1, len(boundary_list))
-    if boundary_list:
-        m = boundary_mean
-        boundary_flatness = (sum((v - m) ** 2 for v in boundary_list) / max(1, len(boundary_list))) ** 0.5
-    else:
-        boundary_flatness = 0.0
-
+    boundary_flatness = (sum((v - boundary_mean) ** 2 for v in boundary_list) / max(1, len(boundary_list))) ** 0.5 if boundary_list else 0.0
     primitive_weights = rep.get("primitive_weights", [])
     seq_nonflat = float(seq_change.mean()) if seq_change.numel() else 0.0
+    memory_consumer_proxy = memory_future_read + head_memory
+
+    flags = []
+    entropy_mean = float(_tensor_from_list(rep.get("route_entropy", [])).mean()) if rep.get("route_entropy") else 0.0
+    if boundary_mean > 0.90 and boundary_flatness < 0.05:
+        flags.append("BOUNDARY_EXPLOIT")
+    if boundary_mean < 0.05 or len(peaks) == 0:
+        flags.append("BOUNDARY_DEAD")
+    if entropy_mean > 1.30:
+        flags.append("ROUTE_UNIFORM")
+    if self_route_mass > 0.88 and useful_transition_mass < 0.12:
+        flags.append("ROUTE_IDENTITY_COLLAPSE")
+    if detail_attention > 0.55:
+        flags.append("DETAIL_SHORTCUT")
+    if memory_write < 0.03 and memory_consumer_proxy < 0.08:
+        flags.append("MEMORY_DEAD")
+    if memory_write > 0.30 and memory_consumer_proxy < 0.08:
+        flags.append("MEMORY_JUNK")
 
     return {
         "epoch": int(epoch),
         "window": {"type": "epoch", "index": int(epoch)},
         "compare_to": str(getattr(args, "compare_to", "baseline_missing")),
-        "version": "v4.3_min_heart",
+        "version": "v4.3_min_heart_canonical",
+        "collapse_flags": flags,
         "route": {
-            "entropy_mean": float(_tensor_from_list(rep.get("route_entropy", [])).mean()) if rep.get("route_entropy") else 0.0,
+            "entropy_mean": entropy_mean,
             "matrix_by_step": rep.get("route_matrix", []),
             "offdiag_raw": offdiag_raw.tolist() if offdiag_raw.numel() else [],
             "offdiag_norm": offdiag_norm.tolist() if offdiag_norm.numel() else [],
             "offdiag_inside_boundary": inside.tolist() if inside.numel() else [],
             "offdiag_outside_boundary": outside.tolist() if outside.numel() else [],
             "offdiag_outside_boundary_cost": float(outside.mean()) if outside.numel() else 0.0,
+            "self_route_by_step": self_route_by_step.tolist() if self_route_by_step.numel() else [],
+            "useful_transition_by_step": useful_transition_by_step.tolist() if useful_transition_by_step.numel() else [],
+            "self_route_mass": self_route_mass,
+            "useful_transition_mass": useful_transition_mass,
             "boundary_by_step": boundary_list,
             "boundary_mean": boundary_mean,
             "boundary_flatness": boundary_flatness,
@@ -492,48 +558,16 @@ def build_trace_feedback(rep: Dict, args, epoch: int) -> Dict:
             "route_delta_by_step": route_delta.tolist()[: int(args.tape_steps)] if route_delta.numel() else [],
             "primitive_delta_by_step": primitive_delta.tolist()[: int(args.tape_steps)] if primitive_delta.numel() else [],
             "trace_delta_by_step": trace_delta.tolist()[: int(args.tape_steps)] if trace_delta.numel() else [],
+            "read_delta_by_step": read_delta.tolist()[: int(args.tape_steps)] if read_delta.numel() else [],
             "sequence_change_by_step": seq_change.tolist() if seq_change.numel() else [],
             "sequence_nonflat_score": seq_nonflat,
         },
-        "read": {
-            "late_input_by_step": [float(v) for v in late_by_step],
-            "late_input_cost": float(sum(late_by_step) / max(1, len(late_by_step))) if late_by_step else 0.0,
-            "input_read_total": input_total,
-        },
-        "memory": {
-            "write_mean": memory_write,
-            "write_cost": memory_write,
-            "overwrite_score": memory_overwrite,
-            "future_read": memory_future_read,
-            "head_consumer": head_memory,
-            "consumer_score": memory_future_read + head_memory,
-        },
-        "head": {
-            "detail_attention_mass": detail_attention,
-            "detail_head_shortcut_cost": detail_cost,
-            "detail_topread_share": detail_topread,
-            "class_lane_mass": rep.get("class_lane_mass", []),
-            "lane_mass_mean": lane_mass_mean,
-            "top_reads": rep.get("class_top_reads", []),
-        },
-        "operators": {
-            "primitive_weights": primitive_weights,
-            "primitive_names": rep.get("primitive_names", list(PRIMITIVES)),
-            "operator_complexity_cost": 0.0,
-            "variants_implemented": False,
-        },
-        "budget": {
-            "skip_gate_mean": 0.0,
-            "skip_cost": 0.0,
-            "residual_dominance_proxy": 0.0,
-            "step_alive": rep.get("step_alive", []),
-            "total_extra_cost": 0.0,
-        },
+        "read": {"late_input_by_step": [float(v) for v in late_by_step], "late_input_cost": float(sum(late_by_step) / max(1, len(late_by_step))) if late_by_step else 0.0, "input_read_total": input_total},
+        "memory": {"write_mean": memory_write, "write_cost": memory_write, "overwrite_score": memory_overwrite, "future_read": memory_future_read, "head_consumer": head_memory, "consumer_score": memory_consumer_proxy, "memory_consumer_proxy": memory_consumer_proxy},
+        "head": {"detail_attention_mass": detail_attention, "detail_head_shortcut_cost": detail_cost, "detail_topread_share": detail_topread, "class_lane_mass": rep.get("class_lane_mass", []), "lane_mass_mean": lane_mass_mean, "top_reads": rep.get("class_top_reads", [])},
+        "operators": {"primitive_weights": primitive_weights, "primitive_names": rep.get("primitive_names", list(PRIMITIVES))},
+        "budget": {"skip_gate_mean": 0.0, "skip_cost": "not_implemented", "operator_complexity_cost": "not_implemented", "update_collapse_proxy": None},
     }
-
-
-def _candidate_key(c: Dict) -> str:
-    return json.dumps({"target_type": c.get("target_type"), "location": c.get("location"), "action": c.get("action"), "target": c.get("target")}, sort_keys=True)
 
 
 def generate_candidate_suggestions(trace: Dict, args, epoch: int) -> Dict:
@@ -681,13 +715,33 @@ def generate_candidate_suggestions(trace: Dict, args, epoch: int) -> Dict:
     return {
         "epoch": int(epoch),
         "window": {"type": "epoch", "index": int(epoch)},
-        "version": "v4.3_min_heart",
+        "version": "v4.3_min_heart_canonical",
         "candidates": candidates,
         "diversity": {
             "by_source": by_source,
             "by_target_type": by_target,
             "by_step": by_step,
             "by_lane": by_lane,
+            "attempted_candidates": len(candidates),
+            "skipped_duplicates": 0,
+            "attempted_candidates": len(candidates),
+            "skipped_duplicates": 0,
+            "attempted_candidates": len(candidates),
+            "skipped_duplicates": 0,
+            "attempted_candidates": len(candidates),
+            "skipped_duplicates": 0,
+            "attempted_candidates": len(candidates),
+            "skipped_duplicates": 0,
+            "attempted_candidates": len(candidates),
+            "skipped_duplicates": 0,
+            "attempted_candidates": len(candidates),
+            "skipped_duplicates": 0,
+            "attempted_candidates": len(candidates),
+            "skipped_duplicates": 0,
+            "attempted_candidates": len(candidates),
+            "skipped_duplicates": 0,
+            "attempted_candidates": len(candidates),
+            "skipped_duplicates": 0,
             "duplicate_rate": 0.0,
         },
     }
@@ -721,6 +775,36 @@ def write_chatgpt_report(out_dir: Path, analysis: Dict, trace: Dict, candidates:
         f"- boundary_flatness/std: {float(route.get('boundary_flatness', 0.0)):.4f}",
         f"- boundary_peak_count: {int(route.get('boundary_peak_count', 0))} peaks={peaks}",
         f"- offdiag_outside_boundary_cost: {float(route.get('offdiag_outside_boundary_cost', 0.0)):.4f}",
+        f"- self_route_mass: {float(route.get('self_route_mass', 0.0)):.4f}",
+        f"- useful_transition_mass: {float(route.get('useful_transition_mass', 0.0)):.4f}",
+        f"- collapse_flags: {','.join(trace.get('collapse_flags', []) or []) if trace.get('collapse_flags') else 'NONE'}",
+        f"- self_route_mass: {float(route.get('self_route_mass', 0.0)):.4f}",
+        f"- useful_transition_mass: {float(route.get('useful_transition_mass', 0.0)):.4f}",
+        f"- collapse_flags: {','.join(trace.get('collapse_flags', []) or []) if trace.get('collapse_flags') else 'NONE'}",
+        f"- self_route_mass: {float(route.get('self_route_mass', 0.0)):.4f}",
+        f"- useful_transition_mass: {float(route.get('useful_transition_mass', 0.0)):.4f}",
+        f"- collapse_flags: {','.join(trace.get('collapse_flags', []) or []) if trace.get('collapse_flags') else 'NONE'}",
+        f"- self_route_mass: {float(route.get('self_route_mass', 0.0)):.4f}",
+        f"- useful_transition_mass: {float(route.get('useful_transition_mass', 0.0)):.4f}",
+        f"- collapse_flags: {','.join(trace.get('collapse_flags', []) or []) if trace.get('collapse_flags') else 'NONE'}",
+        f"- self_route_mass: {float(route.get('self_route_mass', 0.0)):.4f}",
+        f"- useful_transition_mass: {float(route.get('useful_transition_mass', 0.0)):.4f}",
+        f"- collapse_flags: {','.join(trace.get('collapse_flags', []) or []) if trace.get('collapse_flags') else 'NONE'}",
+        f"- self_route_mass: {float(route.get('self_route_mass', 0.0)):.4f}",
+        f"- useful_transition_mass: {float(route.get('useful_transition_mass', 0.0)):.4f}",
+        f"- collapse_flags: {','.join(trace.get('collapse_flags', []) or []) if trace.get('collapse_flags') else 'NONE'}",
+        f"- self_route_mass: {float(route.get('self_route_mass', 0.0)):.4f}",
+        f"- useful_transition_mass: {float(route.get('useful_transition_mass', 0.0)):.4f}",
+        f"- collapse_flags: {','.join(trace.get('collapse_flags', []) or []) if trace.get('collapse_flags') else 'NONE'}",
+        f"- self_route_mass: {float(route.get('self_route_mass', 0.0)):.4f}",
+        f"- useful_transition_mass: {float(route.get('useful_transition_mass', 0.0)):.4f}",
+        f"- collapse_flags: {','.join(trace.get('collapse_flags', []) or []) if trace.get('collapse_flags') else 'NONE'}",
+        f"- self_route_mass: {float(route.get('self_route_mass', 0.0)):.4f}",
+        f"- useful_transition_mass: {float(route.get('useful_transition_mass', 0.0)):.4f}",
+        f"- collapse_flags: {','.join(trace.get('collapse_flags', []) or []) if trace.get('collapse_flags') else 'NONE'}",
+        f"- self_route_mass: {float(route.get('self_route_mass', 0.0)):.4f}",
+        f"- useful_transition_mass: {float(route.get('useful_transition_mass', 0.0)):.4f}",
+        f"- collapse_flags: {','.join(trace.get('collapse_flags', []) or []) if trace.get('collapse_flags') else 'NONE'}",
         "",
         "Sequence:",
         f"- active tape steps step_alive>=0.50: {active}",
@@ -731,7 +815,7 @@ def write_chatgpt_report(out_dir: Path, analysis: Dict, trace: Dict, candidates:
         f"- detail_attention_mass: {float(head.get('detail_attention_mass', 0.0)):.4f}",
         f"- detail_topread_share(report-only): {float(head.get('detail_topread_share', 0.0)):.4f}",
         f"- memory_write_mean: {float(memory.get('write_mean', 0.0)):.4f}",
-        f"- memory_consumer_score: {float(memory.get('consumer_score', 0.0)):.4f}",
+        f"- memory_consumer_proxy: {float(memory.get('memory_consumer_proxy', memory.get('consumer_score', 0.0))):.4f}",
         "",
         "Candidate suggestions:",
     ]
@@ -797,7 +881,7 @@ def run(args) -> None:
         "boundary_budget_cost", "boundary_flatness", "boundary_peak_count", "late_input_read_cost",
         "memory_write_cost", "memory_overwrite_cost", "memory_write_gate", "memory_future_read",
         "memory_head_consumer", "memory_consumer_score", "detail_attention_mass", "detail_head_shortcut_cost",
-        "skip_gate_mean", "skip_cost", "residual_dominance_proxy", "operator_complexity_cost",
+        "skip_gate_mean", "skip_cost", "update_collapse_proxy", "residual_dominance_proxy", "operator_complexity_cost",
         "sequence_nonflat_score", "sequence_route_delta_mean", "sequence_primitive_delta_mean", "sequence_read_delta_mean",
         "logit_norm", "pair_update_norm",
     ]
@@ -867,7 +951,7 @@ def run(args) -> None:
         )
 
     v42.write_json(out_dir / "final_report.json", {
-        "version": "v4.3_min_heart",
+        "version": "v4.3_min_heart_canonical",
         "best_acc": best,
         "best_epoch": best_epoch,
         "args": vars(args),

@@ -1,0 +1,1 @@
+[v4.3 sync] speed cfg: batch=192 eval_batch=512 workers=6 log_every=100 max_train_batches=0 max_val_batches=0

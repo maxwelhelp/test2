@@ -15,12 +15,15 @@ EPOCHS="${EPOCHS:-5}"
 TRAIN_LIMIT="${TRAIN_LIMIT:-12000}"
 VAL_LIMIT="${VAL_LIMIT:-2000}"
 AMP="${AMP:-fp16}"
-BATCH_SIZE="${BATCH_SIZE:-128}"
-EVAL_BATCH_SIZE="${EVAL_BATCH_SIZE:-256}"
-WORKERS="${WORKERS:-4}"
+# Speed defaults for P40/24GB. Override with BATCH_SIZE=128 if OOM.
+BATCH_SIZE="${BATCH_SIZE:-192}"
+EVAL_BATCH_SIZE="${EVAL_BATCH_SIZE:-512}"
+WORKERS="${WORKERS:-6}"
 SEED="${SEED:-42}"
 DEVICE="${DEVICE:-cuda}"
-LOG_EVERY="${LOG_EVERY:-50}"
+LOG_EVERY="${LOG_EVERY:-100}"
+MAX_TRAIN_BATCHES="${MAX_TRAIN_BATCHES:-0}"
+MAX_VAL_BATCHES="${MAX_VAL_BATCHES:-0}"
 COMPARE_TO="${COMPARE_TO:-v4.2_fixed_guided same seed/config or baseline_missing}"
 
 echo "[v4.3 sync] validate"
@@ -30,6 +33,7 @@ echo "[v4.3 sync] gradient sanity"
 OUT="$REPORT_DIR/grad_sanity.json" bash simple_butterfly_matrix_v4_tape_lane/commands/grad_sanity_v4_3_min_heart.sh | tee "$REPORT_DIR/grad_sanity.log"
 
 echo "[v4.3 sync] run audit-fixed wrapper -> $REPORT_DIR"
+echo "[v4.3 sync] speed cfg: batch=$BATCH_SIZE eval_batch=$EVAL_BATCH_SIZE workers=$WORKERS log_every=$LOG_EVERY max_train_batches=$MAX_TRAIN_BATCHES max_val_batches=$MAX_VAL_BATCHES" | tee "$REPORT_DIR/speed_config.txt"
 set +e
 bash simple_butterfly_matrix_v4_tape_lane/commands/run_v4_3_min_heart_audit_fixed.sh \
   --data-root "$DATA_ROOT" \
@@ -39,6 +43,8 @@ bash simple_butterfly_matrix_v4_tape_lane/commands/run_v4_3_min_heart_audit_fixe
   --batch-size "$BATCH_SIZE" \
   --eval-batch-size "$EVAL_BATCH_SIZE" \
   --workers "$WORKERS" \
+  --max-train-batches "$MAX_TRAIN_BATCHES" \
+  --max-val-batches "$MAX_VAL_BATCHES" \
   --seed "$SEED" \
   --device "$DEVICE" \
   --amp "$AMP" \
@@ -92,9 +98,18 @@ Report dir: $REPORT_DIR
 Command: sync_run_5ep_v4_3_min_heart_push_logs.sh
 Run status: $RUN_STATUS
 
+Speed config:
+- batch_size: $BATCH_SIZE
+- eval_batch_size: $EVAL_BATCH_SIZE
+- workers: $WORKERS
+- log_every: $LOG_EVERY
+- max_train_batches: $MAX_TRAIN_BATCHES
+- max_val_batches: $MAX_VAL_BATCHES
+
 Expected artifacts:
 - grad_sanity.json
 - grad_sanity.log
+- speed_config.txt
 - metrics.csv
 - analysis_epoch_XXX.json
 - trace_feedback_epoch_XXX.json
@@ -117,19 +132,19 @@ try:
     route = tr.get('route') or {}
     head = tr.get('head') or {}
     memory = tr.get('memory') or {}
-    flags = []
+    flags = list(tr.get('collapse_flags') or [])
     bm = float(route.get('boundary_mean', 0.0) or 0.0)
     bf = float(route.get('boundary_flatness', 0.0) or 0.0)
     ent = float(route.get('entropy_mean', 0.0) or 0.0)
     detail = float(head.get('detail_attention_mass', 0.0) or 0.0)
     mem_w = float(memory.get('write_mean', 0.0) or 0.0)
     mem_c = float(memory.get('consumer_score', 0.0) or 0.0)
-    if bm > 0.90 and bf < 0.05: flags.append('BOUNDARY_EXPLOIT')
-    if bm < 0.05: flags.append('BOUNDARY_DEAD')
-    if ent > 1.30: flags.append('ROUTE_UNIFORM')
-    if detail > 0.55: flags.append('DETAIL_SHORTCUT')
-    if mem_w < 0.03: flags.append('MEMORY_DEAD')
-    if mem_w > 0.30 and mem_c < 0.08: flags.append('MEMORY_JUNK')
+    if bm > 0.90 and bf < 0.05 and 'BOUNDARY_EXPLOIT' not in flags: flags.append('BOUNDARY_EXPLOIT')
+    if bm < 0.05 and 'BOUNDARY_DEAD' not in flags: flags.append('BOUNDARY_DEAD')
+    if ent > 1.30 and 'ROUTE_UNIFORM' not in flags: flags.append('ROUTE_UNIFORM')
+    if detail > 0.55 and 'DETAIL_SHORTCUT' not in flags: flags.append('DETAIL_SHORTCUT')
+    if mem_w < 0.03 and 'MEMORY_DEAD' not in flags: flags.append('MEMORY_DEAD')
+    if mem_w > 0.30 and mem_c < 0.08 and 'MEMORY_JUNK' not in flags: flags.append('MEMORY_JUNK')
     with open(dst, 'a', encoding='utf-8') as f:
         f.write('\nSummary:\n')
         f.write(f"- best_acc: {float(data.get('best_acc', 0.0))*100:.2f}% @ epoch {data.get('best_epoch', 0)}\n")

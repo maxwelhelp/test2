@@ -1,0 +1,173 @@
+{
+  "epoch": 6,
+  "window": {
+    "type": "epoch",
+    "index": 6
+  },
+  "version": "v4.3_min_heart_canonical",
+  "candidates": [
+    {
+      "source": "boundary_specialization_rule",
+      "target_type": "boundary",
+      "location": {
+        "t": "all"
+      },
+      "action": "increase",
+      "target": "boundary_peak_contrast",
+      "reason": "boundary is flat or has no hard peaks; program stages are not separated",
+      "evidence_metrics": {
+        "boundary_peak_count": 12,
+        "boundary_soft_peak_count": 11.999999046325684,
+        "boundary_flatness": 0.003534384426618339
+      },
+      "risk": "medium",
+      "delta_scale": 0.03,
+      "deploy": false
+    },
+    {
+      "source": "boundary_rule",
+      "target_type": "boundary",
+      "location": {
+        "t": 1
+      },
+      "action": "decrease",
+      "target": "boundary",
+      "reason": "boundary is high but boundary_usefulness is low",
+      "evidence_metrics": {
+        "boundary": 0.9950430989265442,
+        "boundary_usefulness": 0.02929302677512169
+      },
+      "risk": "low",
+      "delta_scale": 0.03,
+      "deploy": false
+    },
+    {
+      "source": "boundary_rule",
+      "target_type": "boundary",
+      "location": {
+        "t": 2
+      },
+      "action": "decrease",
+      "target": "boundary",
+      "reason": "boundary is high but boundary_usefulness is low",
+      "evidence_metrics": {
+        "boundary": 0.9953917264938354,
+        "boundary_usefulness": 0.025511618703603745
+      },
+      "risk": "low",
+      "delta_scale": 0.03,
+      "deploy": false
+    },
+    {
+      "source": "boundary_rule",
+      "target_type": "boundary",
+      "location": {
+        "t": 4
+      },
+      "action": "decrease",
+      "target": "boundary",
+      "reason": "boundary is high but boundary_usefulness is low",
+      "evidence_metrics": {
+        "boundary": 0.9934601187705994,
+        "boundary_usefulness": 0.022109026089310646
+      },
+      "risk": "low",
+      "delta_scale": 0.03,
+      "deploy": false
+    },
+    {
+      "source": "boundary_rule",
+      "target_type": "boundary",
+      "location": {
+        "t": 5
+      },
+      "action": "decrease",
+      "target": "boundary",
+      "reason": "boundary is high but boundary_usefulness is low",
+      "evidence_metrics": {
+        "boundary": 0.9921308159828186,
+        "boundary_usefulness": 0.025135396048426628
+      },
+      "risk": "low",
+      "delta_scale": 0.03,
+      "deploy": false
+    },
+    {
+      "source": "boundary_rule",
+      "target_type": "boundary",
+      "location": {
+        "t": 6
+      },
+      "action": "decrease",
+      "target": "boundary",
+      "reason": "boundary is high but boundary_usefulness is low",
+      "evidence_metrics": {
+        "boundary": 0.99073725938797,
+        "boundary_usefulness": 0.015444783493876457
+      },
+      "risk": "low",
+      "delta_scale": 0.03,
+      "deploy": false
+    },
+    {
+      "source": "boundary_rule",
+      "target_type": "boundary",
+      "location": {
+        "t": 7
+      },
+      "action": "decrease",
+      "target": "boundary",
+      "reason": "boundary is high but boundary_usefulness is low",
+      "evidence_metrics": {
+        "boundary": 0.9894516468048096,
+        "boundary_usefulness": 0.02956879884004593
+      },
+      "risk": "low",
+      "delta_scale": 0.03,
+      "deploy": false
+    },
+    {
+      "source": "boundary_rule",
+      "target_type": "boundary",
+      "location": {
+        "t": 8
+      },
+      "action": "decrease",
+      "target": "boundary",
+      "reason": "boundary is high but boundary_usefulness is low",
+      "evidence_metrics": {
+        "boundary": 0.9881337285041809,
+        "boundary_usefulness": 0.01577780582010746
+      },
+      "risk": "low",
+      "delta_scale": 0.03,
+      "deploy": false
+    }
+  ],
+  "diversity": {
+    "by_source": {
+      "boundary_specialization_rule": 1,
+      "boundary_rule": 7
+    },
+    "by_target_type": {
+      "boundary": 8
+    },
+    "by_step": {
+      "all": 1,
+      "1": 1,
+      "2": 1,
+      "4": 1,
+      "5": 1,
+      "6": 1,
+      "7": 1,
+      "8": 1
+    },
+    "by_lane": {},
+    "selected_candidates": 8,
+    "attempted_candidates": 12,
+    "skipped_duplicates": 0,
+    "duplicate_rate": 0.0,
+    "max_candidates_effective": 8,
+    "attempted_after_filter": 8
+  }
+}

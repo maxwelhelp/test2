@@ -1,193 +1,408 @@
 # v4.3_min_heart Plan
 
-This document fixes the critical critiques of the Program Heart design and defines the next implementation target:
+This file is the single authoritative plan for the next conservative bridge from v4.2 to ProgramHeart.
+
+Do not create additional Heart design files until this version is implemented and tested.
+
+`v4.3_min_heart` is **not** the full ProgramHeart.
+
+It is:
 
 ```text
-v4.3_min_heart = tape-lane body + costed differentiable paths + route/boundary trace + candidate suggestions, without full actor/critic/planner and without auto-deploy.
+tape-lane body
++ costed differentiable paths
++ boundary-coupled route economics
++ route/boundary/read/memory/head trace
++ deterministic sparse candidate suggestions
++ optional cheap forward-only screen later
++ full 5ep logging/sync script
 ```
 
-The goal is not to build the full brain yet.
+It explicitly does **not** include yet:
 
-The goal is to make the architecture economically shaped so it cannot collapse into an all-to-all mixer, and to produce enough reliable trace/candidate data for later Heart stages.
+```text
+auto-deploy feedback
+actor
+critic
+TapePlannerAttention
+macro promotion
+full verify with training steps
+compound edits
+many workshops
+```
+
+The purpose is to answer one core question before building a brain:
+
+```text
+Are the learned separators and path economics meaningful, or does the model collapse into all-to-all read/route/head shortcuts?
+```
 
 ---
 
-## 1. Critiques accepted as hard requirements
+## 0. Accepted critiques and mandatory fixes
 
-### 1.1 Gradient loop vs feedback loop conflict
+These are hard requirements, not optional opinions.
 
-Feedback bias must not be a normal trainable parameter.
+### 0.1 Feedback vs gradient loop conflict
 
-When feedback is eventually enabled, it must be applied as a detached offset:
+When feedback deploy exists in a later version, feedback must be a detached buffer, never an optimizer parameter.
+
+Correct future formula:
 
 ```python
-logit_effective = learned_param + feedback_bias.detach()
+logit_effective = learned_param + learned_context_bias + feedback_bias.detach() + actor_bias.detach()
 ```
 
-This separates optimizer updates from tested action feedback.
-
-For `v4.3_min_heart`:
+For v4.3:
 
 ```text
-no auto-deploy feedback yet;
-only trace and candidate suggestions.
+no feedback auto-deploy;
+no actor_bias;
+only learned_param + learned_context_bias in the model;
+only suggestions are emitted.
 ```
 
-But the code should be designed so future feedback buffers can be added cleanly.
+`learned_context_bias` means a normal differentiable context network trained by the task gradient. It is part of the base model.
 
-### 1.2 Define window explicitly
+`feedback_bias` means a future tested-action buffer updated outside optimizer. It is not trainable by gradient.
 
-A `heart_window` is the unit at which the Heart wakes up.
+This distinction must be kept explicit in code comments.
 
-For `v4.3_min_heart`:
+### 0.2 Influence is not all differentiable
+
+Base model choices are differentiable.
+
+Future feedback/actor deployment biases are not optimizer-trained:
+
+```python
+feedback_bias = feedback_bias.detach()
+actor_bias = actor_bias.detach()
+```
+
+Do not write vague comments like `all influence is differentiable` for feedback buffers.
+
+Correct wording:
+
+```text
+The model path remains differentiable through learned parameters.
+Tested feedback offsets are detached control signals.
+```
+
+### 0.3 Heart window definition
+
+For v4.3:
 
 ```text
 heart_window = epoch
 ```
 
-Meaning:
+A window is:
 
 ```text
-train epoch normally;
-evaluate/collect trace on validation microbatches;
+train one epoch normally;
+evaluate validation normally;
+collect trace on validation batches;
 write trace_feedback_epoch_XXX.json;
 generate candidate_suggestions_epoch_XXX.json;
+write REPORT_TO_CHATGPT.txt;
 no deploy.
 ```
 
-Later versions can use:
+Later versions may use `heart_window_steps=250/500`, but v4.3 must use epoch windows only.
+
+### 0.4 Counterfactual screen protocol
+
+If implemented in v4.3, it must be forward-only and optional.
+
+Allowed cheap screen:
 
 ```text
-heart_window_steps = 250 or 500 train steps
-```
-
-But MVP uses epoch windows for simplicity.
-
-### 1.3 CounterfactualScreen protocol
-
-Counterfactual tests must not mix action effect with training effect.
-
-For cheap screen:
-
-```text
-forward only;
+same heldout microbatch;
 no backward;
 no optimizer step;
-paired same microbatch baseline vs candidate;
-restore temporary bias immediately.
+torch.no_grad();
+baseline forward;
+temporary detached candidate bias forward;
+restore immediately;
+record delta.
 ```
 
-Full verify with N mini-steps is postponed.
-
-For `v4.3_min_heart`:
+Not allowed in v4.3:
 
 ```text
-candidate suggestions are produced;
-optional cheap forward-only screen may be implemented;
-no train-step verify;
+run N train mini-steps during action testing;
+measure action + training mixed gain;
+deploy accepted action.
+```
+
+Full verify with training steps is postponed until a future version with full-state rollback.
+
+### 0.5 Boundary exploit must be closed
+
+If route cost is:
+
+```text
+offdiag * (1 - boundary)
+```
+
+then the model can set `boundary=1` everywhere and get free cross-lane routing.
+
+Therefore v4.3 must include boundary economy:
+
+```text
+boundary_budget_cost = mean(boundary)
+boundary_flatness metric
+boundary_peak_count metric
+boundary_usefulness metric
+```
+
+Boundary is only good when it aligns with real trace/route/primitive changes.
+
+### 0.6 Normalized offdiag cost
+
+Raw offdiag route mass depends on lane count.
+
+Use normalized cost for loss:
+
+```python
+offdiag_mass_raw[t] = sum_{from,to,from!=to} R_t[from,to]
+offdiag_mass_norm[t] = mean_from(sum_to!=from R_t[from,to])
+```
+
+For `L` lanes, `offdiag_mass_norm` is in `[0,1]`.
+
+Log both raw and normalized.
+
+Use normalized in loss.
+
+### 0.7 Detail shortcut loss must be differentiable
+
+`detail_topread_share` is good for reports but not for loss because top-k is not a stable differentiable training signal.
+
+For loss use:
+
+```text
+detail_attention_mass = sum class_slot_attention over detail-lane slots
+```
+
+Loss:
+
+```text
+detail_head_shortcut_cost = relu(detail_attention_mass - target)^2
+```
+
+Keep `detail_topread_share` only for logging/report.
+
+### 0.8 Skip ambiguity
+
+The base residual path already exists:
+
+```python
+X_next = X + gated_update
+```
+
+Do not accidentally add a second free bypass.
+
+In v4.3 choose one of these:
+
+Option A, preferred MVP:
+
+```text
+no extra skip path;
+log residual dominance proxy only;
+skip_gate_mean = 0;
+skip_cost = 0 placeholder.
+```
+
+Option B, if extra skip is implemented:
+
+```text
+extra_skip = skip_gate * skip_proj(X)
+skip_gate is paid by lambda_skip_cost;
+base residual remains X + gated_update.
+```
+
+Do not create `X + update + free skip_proj(X)`.
+
+### 0.9 Memory write/read distinction
+
+Memory read must not be penalized.
+
+Memory write is allowed but paid mildly.
+
+Memory overwrite/churn is paid more strongly.
+
+Required memory consumer score:
+
+```text
+memory_consumer_score = future_memory_read + head_memory_attention + grad_attribution_proxy_optional
+```
+
+If memory write is high and consumer score is high, candidate suggestions must not say “kill memory”.
+
+They may suggest:
+
+```text
+open memory->state route;
+protect memory from overwrite;
+reduce excessive overwrite, not memory use.
+```
+
+### 0.10 Late input read schedule
+
+Late input cost must not kill early evidence access.
+
+Use a depth weight that is near zero early and grows after the middle of the tape:
+
+```python
+progress = t / max(1, T - 1)
+depth_weight = sigmoid((progress - late_input_start) / late_input_tau)
+```
+
+Suggested defaults:
+
+```text
+late_input_start = 0.45
+late_input_tau = 0.12
+```
+
+Log `late_input_read_by_step`, not just mean.
+
+### 0.11 Candidate suggestions deterministic and sparse
+
+No noisy text spam.
+
+Per epoch:
+
+```text
+max_candidates = 8 to 12
+all candidates deploy=false
+no duplicate candidates
+schema must include source, target_type, location, action, delta_scale, reason, evidence_metrics, risk, deploy=false
+```
+
+### 0.12 Same-seed comparison required
+
+v4.3 5ep report must state what v4.2 baseline it should be compared against.
+
+Minimum:
+
+```text
+compare_to = v4.2_fixed_guided same seed/config if available
+```
+
+If not available, report must say:
+
+```text
+baseline missing; run v4.2_fixed_guided with same seed/config before judging accuracy.
+```
+
+### 0.13 Usage EMA lag rule
+
+Any usage prior or EMA is future work, not v4.3.
+
+When implemented later:
+
+```text
+EMA updates after forward/backward of current batch/window;
+EMA applies only to next batch/window;
+EMA is detached and clamped.
+```
+
+Never let current forward use statistics produced later in the same forward.
+
+### 0.14 Critic/action/context embeddings are future, but schemas must be stored
+
+v4.3 must store candidate fields rich enough for future critic.
+
+No critic is trained in v4.3.
+
+---
+
+## 1. Canonical MVP sequence
+
+This list replaces all previous conflicting MVP lists.
+
+### MVP 0: v4.3_min_heart path economy and trace
+
+Current target.
+
+```text
+costed differentiable paths;
+boundary-coupled route cost;
+trace_feedback_epoch_XXX.json;
+candidate_suggestions_epoch_XXX.json;
 no deploy.
 ```
 
-### 1.4 Bias baking postponed
+### MVP 1: cheap forward-only counterfactual screen
 
-Accepted repeated biases may later be baked into base logits after K confirmations.
-
-For this version:
+Optional after MVP 0 logs look sane.
 
 ```text
-no feedback deploy -> no baking.
+paired microbatch baseline vs candidate;
+no backward;
+no optimizer step;
+max 8 candidates;
+no deploy.
 ```
 
-But the plan records future rule:
+### MVP 2: detached FeedbackBiasBank for route/boundary only
+
+Only after cheap screen is stable.
 
 ```text
-if same action accepted K times and remains useful, bake into learned base or persistent prior, then reset transient feedback bias.
+feedback_route_bias.detach();
+feedback_boundary_bias.detach();
+max one accepted action per epoch/window;
+prove effective route/boundary probabilities changed next window.
 ```
 
-### 1.5 Context and action embeddings postponed but specified
+### MVP 3: primitive/variant heart
 
-Critic is too early.
+Add primitive and rank/depth/radius variant candidates after route/boundary feedback works.
 
-For this version:
+### MVP 4: memory/write heart
+
+Add memory consumer-aware candidates.
+
+### MVP 5: head heart
+
+Add class/pair/head read candidates and head-to-core task hints.
+
+### MVP 6: ExperienceMemory + cold-start critic
+
+Only after stable tested records exist.
+
+Minimum future gate:
 
 ```text
-write target-local trace fields and action schema;
-do not train critic.
+>= 500 cheap-screen records;
+>= 100 accepted/rejected non-no_effect records;
+model/window metrics stable enough;
+feedback deploy proved to affect effective probabilities.
 ```
 
-The stored candidate must include enough fields for future context/action embeddings.
+### MVP 7: multi-projection actors
 
-### 1.6 Critic cold-start postponed
+Small actors per domain, not one giant dense actor.
 
-Critic/Actor/Planner start only after enough stable tested records exist.
+### MVP 8: standard TapePlannerAttention
 
-Minimum future conditions:
+Standard attention over compressed trace tokens. No linear/cheap attention needed at this scale.
 
-```text
->= 500 cheap-screen records
->= 100 accepted/rejected non-no_effect records
-model has plateaued or window-to-window metrics are stable enough
-feedback deploy proved to affect effective probabilities
-```
+### MVP 9: macro/growth promotion
 
-### 1.7 Diversity and stuck detection
-
-Candidate suggestions must report diversity:
-
-```text
-candidate_count_by_source
-candidate_count_by_target_type
-candidate_count_by_step
-candidate_count_by_lane
-duplicate_rate
-rejected_repeat_rate later
-```
-
-If diversity collapses, force safe exploration later.
-
-### 1.8 Attention planner postponed
-
-Trace tokens are small, so standard attention is fine later.
-
-No cheap/linear attention needed for MVP.
-
-For this version:
-
-```text
-no TapePlannerAttention;
-standard attention can be added later if rule/counterfactual loop works.
-```
+Only after critic and tested records are reliable.
 
 ---
 
-## 2. Main architectural problem for v4.3
+## 2. Architecture of v4.3_min_heart
 
-If every path is cheap, the model can collapse into:
-
-```text
-all-to-all read;
-uniform route;
-flat boundary;
-head shortcut through detail slots;
-memory as junk storage;
-skip/residual dominance;
-operator complexity growth without real gain.
-```
-
-Therefore `v4.3_min_heart` must add explicit path economics.
-
-Not hard masks.
-
-All paths remain soft/differentiable, but expensive when they are not justified.
-
----
-
-## 3. Core design of v4.3_min_heart
-
-Keep from v4.2:
+Keep v4.2 fixed body:
 
 ```text
-tape-lane body;
+tape-lane execution;
 structured input init but weak/ablatable;
 ClassMatrixLaneHead;
 route_matrix[t,from,to];
@@ -195,111 +410,131 @@ boundary[t];
 step_alive[t];
 soft primitive mix;
 soft read/write;
-SafeBlockButterfly fixed runner.
+SafeBlockButterfly or integrated safe block primitive.
 ```
 
-Add:
+Add v4.3 mechanics:
 
 ```text
-costed differentiable paths;
-boundary-coupled route cost;
-skip/residual gate with cost;
-route/boundary trace feedback;
-candidate suggestions without auto-deploy;
-full logging and report export;
-sync run script to commit/push logs, not .pt.
+costed paths;
+boundary route economy;
+route/boundary trace;
+read/memory/head shortcut trace;
+deterministic candidate suggestions;
+sync 5ep logs.
 ```
 
-Do not add yet:
+Do not add:
 
 ```text
-full ProgramHeart;
 FeedbackBias auto-deploy;
-Critic;
 Actor;
+Critic;
 TapePlannerAttention;
 macro promotion;
-full verify with training steps.
+full verify with training;
+compound edits.
 ```
 
 ---
 
-## 4. Boundary must affect route economics
+## 3. Boundary-coupled route economics
 
-Boundary should not just be logged or weakly bias routes.
+### 3.1 Route offdiag metrics
 
-Boundary should make cross-lane transitions cheaper when a segment boundary is active.
+For each `t`:
 
-### 4.1 Route offdiag cost
-
-For each step:
-
-```text
-offdiag_route_mass[t] = sum_{from != to} R_t[from,to]
+```python
+R = route_matrix[t]  # [L,L], rows sum to 1
+I = eye(L)
+offdiag = R * (1 - I)
+offdiag_mass_raw[t] = offdiag.sum()
+offdiag_mass_norm[t] = offdiag.sum(dim=-1).mean()
 ```
 
-Boundary gate:
+Use `offdiag_mass_norm` for loss.
 
-```text
-boundary[t] in [0,1]
-```
+Log both.
 
-Cost:
+### 3.2 Boundary-gated offdiag cost
 
-```text
-route_offdiag_outside_boundary_cost = offdiag_route_mass[t] * (1 - boundary[t])
+```python
+inside = offdiag_mass_norm[t] * boundary[t]
+outside = offdiag_mass_norm[t] * (1 - boundary[t])
+route_offdiag_outside_boundary_cost = outside.mean()
 ```
 
 Meaning:
 
 ```text
-cross-lane transport is expensive inside a segment;
-cross-lane transport becomes cheaper at a boundary.
+cross-lane routing is expensive inside a segment;
+cross-lane routing is cheaper at a learned boundary;
+boundary itself is not free.
 ```
 
-### 4.2 Inside-boundary usage metric
+### 3.3 Boundary budget and exploit prevention
+
+Add:
+
+```python
+boundary_budget_cost = boundary.mean()
+```
+
+Suggested loss:
+
+```text
+lambda_boundary_budget * mean(boundary)
+```
 
 Log:
 
 ```text
-route_offdiag_inside_boundary = offdiag_route_mass[t] * boundary[t]
-route_offdiag_outside_boundary = offdiag_route_mass[t] * (1 - boundary[t])
+boundary_mean
+boundary_flatness = std(boundary)
+boundary_peak_count = count(boundary > boundary_peak_threshold)
+boundary_by_step
+boundary_peaks
 ```
 
 Success:
 
 ```text
-outside-boundary offdiag decreases;
-inside-boundary offdiag is used when boundary peaks.
+not boundary=1 everywhere;
+not boundary=0 everywhere;
+peaks appear at meaningful program changes.
 ```
 
-### 4.3 Boundary usefulness
+### 3.4 Boundary usefulness
 
-Boundary is useful if it corresponds to actual change.
-
-Log approximate:
+Compute approximate deltas:
 
 ```text
 trace_delta[t] = distance(trace_summary[t], trace_summary[t+1])
 route_delta[t] = distance(R_t, R_{t+1})
 primitive_delta[t] = distance(primitive_w[t], primitive_w[t+1])
+```
+
+Use:
+
+```text
 boundary_usefulness[t] = boundary[t] * (trace_delta + route_delta + primitive_delta)
 ```
 
-Candidate suggestions:
+For logging and suggestions only.
 
-```text
-if boundary high and usefulness low -> suggest decrease boundary
-if boundary low and trace/route/primitive delta high -> suggest increase boundary
-```
+Do not use a strong hard target loss for boundary usefulness in v4.3.
 
 ---
 
-## 5. Required path costs
+## 4. Required path costs
 
-All costs must be optional flags with nonzero defaults for v4.3 run.
+All costs must be CLI-controllable and logged.
 
-### 5.1 route_offdiag_outside_boundary_cost
+### 4.1 route_offdiag_outside_boundary_cost
+
+```text
+lambda_route_offdiag_outside_boundary * mean(offdiag_mass_norm * (1 - boundary))
+```
 
 Purpose:
 
@@ -308,345 +543,485 @@ prevent uniform all-to-all route everywhere;
 encourage cross-lane moves mainly at learned separators.
 ```
 
-Loss term:
+### 4.2 boundary_budget_cost
 
 ```text
-lambda_route_offdiag_outside_boundary * mean(offdiag_mass * (1 - boundary))
+lambda_boundary_budget * mean(boundary)
 ```
-
-### 5.2 late_input_read_cost
 
 Purpose:
 
 ```text
-prevent late steps from shortcutting raw input/evidence instead of using tape state.
+prevent boundary exploit: boundary high everywhere.
 ```
 
-Loss:
+### 4.3 late_input_read_cost
 
-```text
-depth_weight[t] * read_mass[t,lane,input]
+Use depth schedule:
+
+```python
+progress = t / max(1, T - 1)
+depth_weight = sigmoid((progress - late_input_start) / late_input_tau)
+late_input_read_cost = mean_t_l(depth_weight[t] * read_mass[t,l,input])
 ```
-
-Early steps pay little, late steps pay more.
-
-### 5.3 memory_write_cost
 
 Purpose:
 
 ```text
-allow memory write but avoid constant writing every step.
+allow early evidence;
+make late raw-input shortcut expensive.
 ```
 
-Loss:
+### 4.4 memory_write_cost
+
+Mild write budget:
 
 ```text
-memory_write_mass or memory write gate average
+lambda_memory_write_cost * mean(memory_write_gate_or_mass)
 ```
-
-This is a mild budget.
-
-### 5.4 memory_overwrite_cost
 
 Purpose:
 
 ```text
-penalize strong overwrite / churn, not all memory use.
+avoid constant memory writing every step.
 ```
 
-Loss:
+Do not penalize memory read.
+
+### 4.5 memory_overwrite_cost
+
+Stronger overwrite/churn cost:
 
 ```text
 relu(memory_write_gate - memory_write_target)^2
 ```
 
-Keep read from memory cheap or neutral.
-
-### 5.5 skip_cost
-
-Add skip/residual gate, but make it paid.
-
-Why:
-
-```text
-skip is useful for stability, but if free it can dominate and bypass program assembly.
-```
-
-Implement:
-
-```text
-skip_gate[t,lane] = sigmoid(skip_logit[t,lane])
-X_next = X + step_update + skip_gate * skip_update/residual_path
-```
-
-Loss:
-
-```text
-lambda_skip_cost * mean(skip_gate)
-```
-
-MVP option:
-
-```text
-if skip path already implicit via residual, log residual dominance and add cost proxy.
-```
-
-### 5.6 detail_head_shortcut_cost
-
 Purpose:
 
 ```text
-prevent head from solving task by reading only detail/raw slots.
+penalize excessive overwrite, not useful memory.
 ```
 
-Log:
+### 4.6 skip_cost / residual dominance
+
+Preferred v4.3 minimal choice:
+
+```text
+no extra skip path;
+log residual_dominance_proxy;
+skip_gate_mean = 0;
+skip_cost = 0 placeholder.
+```
+
+If extra skip is implemented:
+
+```text
+extra_skip = skip_gate * skip_proj(X);
+lambda_skip_cost * mean(skip_gate);
+base residual still X + gated_update.
+```
+
+### 4.7 detail_head_shortcut_cost
+
+Differentiable loss:
+
+```text
+detail_attention_mass = sum class_slot_attention over detail-lane slots
+detail_head_shortcut_cost = relu(detail_attention_mass - target)^2
+```
+
+Report-only metric:
 
 ```text
 detail_topread_share = fraction/mass of class top reads from detail lane
 ```
 
-Loss:
+### 4.8 operator_complexity_cost
+
+If rank/depth/radius variants do not exist yet:
 
 ```text
-lambda_detail_head_shortcut * relu(detail_topread_share - target)^2
-```
-
-Do not ban detail reads. Penalize dominance.
-
-### 5.7 operator_complexity_cost
-
-Purpose:
-
-```text
-prevent rank/depth/variant complexity from growing without benefit.
-```
-
-For v4.3, if variants are not implemented yet:
-
-```text
-log placeholder as 0;
-include plan and CLI field.
+operator_complexity_cost = 0 placeholder;
+log field exists;
+CLI flag exists;
+report says variants not implemented.
 ```
 
 Later:
 
 ```text
-rank/depth/radius weights * cost_vector
+sum variant_weight * variant_cost
 ```
 
 ---
 
-## 6. Required logs
+## 5. Structured input/head priors in v4.3
 
-Every epoch must export:
+v4.3 may keep weak structured input and head priors from v4.2, but they must be ablatable and logged.
 
-```text
-analysis_epoch_XXX.json
-trace_feedback_epoch_XXX.json
-candidate_suggestions_epoch_XXX.json
-REPORT_TO_CHATGPT.txt
-metrics.csv
-```
+### 5.1 Input structure
 
-If sync script is used:
+Input structure answers:
 
 ```text
-train.log
-final_report.json
-AGENT_STATUS.md
+what exists in the data?
 ```
 
-### 6.1 Core metrics
-
-Log:
+Examples for audio:
 
 ```text
-route_entropy_mean
-route_matrix_by_step
-boundary_by_step
-boundary_peaks
-route_offdiag_inside_boundary
-route_offdiag_outside_boundary
-route_offdiag_outside_boundary_cost
-late_input_read_by_step
-late_input_read_cost
-memory_write_mean
-memory_overwrite_score
-memory_future_read
-skip_gate_mean
-skip_cost
-detail_topread_share
-class_lane_mass
-class_top_reads
-primitive_weights
-step_alive
-operator_complexity_cost
+local/detail energy;
+diff/onset proxy;
+global summary;
+noise/smoothness proxy;
+low-rank/compressibility proxy.
 ```
 
-### 6.2 Trace feedback JSON
+In v4.3, input structure may affect:
 
-`trace_feedback_epoch_XXX.json` should include:
+```text
+initial lane state only;
+optional learned_context_bias trained by gradient.
+```
+
+It must not become hidden hard phase roles.
+
+### 5.2 Head structure
+
+Head structure answers:
+
+```text
+what does the task need?
+```
+
+Use generic indexed tokens, not hardcoded class names:
+
+```text
+HEAD_CONFUSION_PAIR(class_i, class_j)
+LOW_MARGIN_CLASS(class_i)
+SHARED_SLOT_COLLAPSE
+CLASS_UNIQUE_NEED(class_i)
+PAIR_REPAIR_ACTIVE(pair_id)
+OVERCONFIDENT_CLASS(class_i)
+```
+
+For v4.3 these are trace/report fields and suggestion inputs only.
+
+No head actor/critic.
+
+---
+
+## 6. Candidate suggestions in v4.3
+
+No auto-deploy.
+
+Candidate file is a recommendation list for later human/agent inspection.
+
+### 6.1 Candidate schema
+
+Every candidate must include:
+
+```json
+{
+  "source": "route_boundary_rule",
+  "target_type": "route|boundary|read|memory|head|budget",
+  "location": {"t": 4, "lane": null, "from_lane": null, "to_lane": null},
+  "action": "increase|decrease|shift|protect|open|close",
+  "target": "boundary or route.memory->state or read.input",
+  "delta_scale": 0.03,
+  "reason": "short readable explanation",
+  "evidence_metrics": {},
+  "risk": "low|medium|high",
+  "deploy": false
+}
+```
+
+`deploy` must always be false in v4.3.
+
+### 6.2 Diversity fields
+
+```json
+{
+  "diversity": {
+    "by_source": {},
+    "by_target_type": {},
+    "by_step": {},
+    "by_lane": {},
+    "duplicate_rate": 0.0
+  }
+}
+```
+
+### 6.3 Max candidates
+
+Default:
+
+```text
+max_candidates_per_epoch = 8
+hard maximum = 12
+```
+
+### 6.4 Candidate rules
+
+Boundary:
+
+```text
+if boundary high and usefulness low -> suggest decrease boundary
+if boundary low and trace/route/primitive delta high -> suggest increase boundary
+```
+
+Route:
+
+```text
+if offdiag outside boundary high -> suggest increase boundary at that t or decrease specific offdiag route
+if memory write high and future memory read high but memory->state route low -> suggest increase memory->state
+if route entropy near uniform -> suggest sharpen useful route or rely on route cost
+```
+
+Read:
+
+```text
+if late input read high and detail shortcut high -> suggest decrease late input read
+```
+
+Memory:
+
+```text
+if memory write high and future read/head consumer low -> suggest reduce memory write/overwrite
+if memory write high and consumer high -> do not kill memory; suggest protect/open memory->state
+```
+
+Head:
+
+```text
+if detail_attention_mass/detail_topread_share high -> suggest reduce detail shortcut pressure
+if class_lane_mass collapsed -> suggest stronger lane/class read diversity
+```
+
+Budget:
+
+```text
+if step_alive all high and gain not clear -> suggest stronger alive/complexity budget
+if skip/residual proxy dominates -> suggest stronger skip/residual cost or lower extra skip
+```
+
+---
+
+## 7. Trace feedback JSON
+
+`trace_feedback_epoch_XXX.json` must include enough for later critic/action/context embeddings, even though critic is not trained.
+
+Required schema:
 
 ```json
 {
   "epoch": 5,
   "window": {"type": "epoch", "index": 5},
+  "compare_to": "v4.2_fixed_guided same seed/config or baseline_missing",
   "route": {
     "entropy_mean": 0.0,
     "matrix_by_step": [],
+    "offdiag_raw": [],
+    "offdiag_norm": [],
     "offdiag_inside_boundary": [],
     "offdiag_outside_boundary": [],
+    "offdiag_outside_boundary_cost": 0.0,
     "boundary_by_step": [],
+    "boundary_mean": 0.0,
+    "boundary_flatness": 0.0,
+    "boundary_peak_count": 0,
+    "boundary_peaks": [],
     "boundary_usefulness": []
   },
   "read": {
     "late_input_by_step": [],
+    "late_input_cost": 0.0,
     "input_read_total": 0.0
   },
   "memory": {
     "write_mean": 0.0,
+    "write_cost": 0.0,
     "overwrite_score": 0.0,
     "future_read": 0.0,
-    "head_consumer": 0.0
+    "head_consumer": 0.0,
+    "consumer_score": 0.0
   },
   "head": {
+    "detail_attention_mass": 0.0,
+    "detail_head_shortcut_cost": 0.0,
     "detail_topread_share": 0.0,
     "class_lane_mass": {},
     "top_reads": []
   },
   "operators": {
     "primitive_weights": [],
-    "operator_complexity_cost": 0.0
+    "operator_complexity_cost": 0.0,
+    "variants_implemented": false
   },
   "budget": {
     "skip_gate_mean": 0.0,
+    "skip_cost": 0.0,
+    "residual_dominance_proxy": 0.0,
     "step_alive": [],
     "total_extra_cost": 0.0
   }
 }
 ```
 
-### 6.3 Candidate suggestions JSON
+---
 
-No deploy. Suggestions only.
+## 8. Future context/action embedding schemas
 
-Candidate schema:
+These are not implemented as critic in v4.3, but candidate logs must preserve enough fields.
 
-```json
-{
-  "epoch": 5,
-  "window": {"type": "epoch", "index": 5},
-  "candidates": [
-    {
-      "source": "route_boundary_rule",
-      "target_type": "boundary",
-      "location": {"t": 4},
-      "action": "increase",
-      "target": "boundary",
-      "delta_scale": 0.03,
-      "reason": "trace/route/primitive changed strongly but boundary is low",
-      "risk": "low",
-      "deploy": false
-    }
-  ],
-  "diversity": {
-    "by_source": {},
-    "by_target_type": {},
-    "by_step": {},
-    "duplicate_rate": 0.0
-  }
-}
+### 8.1 Context embedding schema
+
+Future fixed-size context vector should be built from:
+
+```text
+target-local trace token;
+previous step summary;
+next step summary;
+local segment summary;
+input structure summary;
+head feedback summary;
+budget state;
+training progress features.
 ```
+
+For route action `R_t[from,to]`:
+
+```text
+concat(
+  trace_token[t, from_lane],
+  trace_token[t, to_lane],
+  route_row[t, from_lane],
+  route_col[t, to_lane],
+  boundary[t],
+  step_alive[t],
+  offdiag_inside/outside metrics,
+  memory/head consumer if relevant
+)
+```
+
+For primitive action:
+
+```text
+concat(
+  trace_token[t,lane],
+  primitive_weights[t,lane],
+  primitive_importance optional,
+  update_norm[t,lane],
+  downstream_consumer_score[t,lane]
+)
+```
+
+For head action:
+
+```text
+concat(
+  class_lane_mass[class_i],
+  class_top_read_summary[class_i],
+  class_margin[class_i],
+  confusion_pair_stats[class_i,class_j],
+  pair_update_norm
+)
+```
+
+### 8.2 Action embedding schema
+
+Future action vector must encode:
+
+```text
+action_type: increase/decrease/shift/protect/open/close
+target_type: route/boundary/read/primitive/variant/write/memory/head/step_alive
+step index normalized: t / T
+lane/from/to one-hot or embedding
+primitive id if any
+variant id if any
+class/pair id if any
+delta_scale
+complexity_delta
+risk flags
+source/workshop id
+```
+
+This avoids undefined `action_embedding` later.
 
 ---
 
-## 7. Candidate suggestion rules for v4.3
+## 9. Future route basis decomposition
 
-No auto-deploy.
+Do not implement route basis decomposition in v4.3 unless trivial.
 
-Generate candidate suggestions from trace.
+If implemented later, use concrete lane-index matrices.
 
-### 7.1 Boundary suggestions
-
-```text
-if boundary[t] high and boundary_usefulness[t] low:
-  suggest decrease boundary[t]
-
-if boundary[t] low and trace_delta/route_delta/primitive_delta high:
-  suggest increase boundary[t]
-```
-
-### 7.2 Route suggestions
+For lanes:
 
 ```text
-if route offdiag outside boundary high:
-  suggest increase boundary or decrease specific offdiag route
-
-if memory write high and future memory read high but memory->state route low:
-  suggest increase memory->state route
-
-if state lane overloaded and abstract usage low:
-  suggest increase state->abstract route at a likely boundary
-
-if route entropy near uniform:
-  suggest sharpen largest useful route or increase cost
+0 detail
+1 state
+2 abstract
+3 memory
 ```
 
-### 7.3 Read suggestions
+Basis matrices are logits templates `[L,L]`:
 
 ```text
-if late input read high and head detail shortcut high:
-  suggest decrease late input read
+identity_basis:
+  +1 on i->i
 
-if early detail read low but input structure indicates local/diff signal:
-  suggest increase early detail/input read
+upward_basis:
+  detail->state, state->abstract
+
+memory_write_basis:
+  state->memory, abstract->memory
+
+memory_read_basis:
+  memory->state, memory->abstract
+
+cross_exchange_basis:
+  detail<->state, state<->abstract, state<->memory weak symmetric
 ```
 
-### 7.4 Memory suggestions
+Formula:
 
-```text
-if memory write high and future read low:
-  suggest decrease memory write or increase memory protect
-
-if memory future read/head consumer high:
-  memory is useful; do not kill memory write, maybe open memory->state route
+```python
+route_logits_t = sum_b route_basis_weight[t,b] * route_basis[b] + residual_route_logits[t]
 ```
 
-### 7.5 Head suggestions
-
-```text
-if detail_topread_share high:
-  suggest reduce head detail lane prior/read dominance
-
-if class_lane_mass collapsed to one lane:
-  suggest increase class read diversity/lane balance
-```
+But v4.3 may keep raw route logits and just log route behavior.
 
 ---
 
-## 8. Counterfactual screen protocol for later
+## 10. Optional cheap counterfactual screen for later
 
-Not required for v4.3, but if added it must follow this exact protocol.
+Not required for v4.3 initial run.
 
-Cheap screen only:
+If added, memory-safe limit:
 
 ```text
-select up to 8 candidates;
-use same heldout microbatch for baseline and candidate;
-forward baseline with no temporary bias;
-forward candidate with temporary detached bias;
+max_candidates_screened = 8
+max_parallel_candidates = min(4, floor(vram_safe_batch / eval_batch_size))
+```
+
+If batching K candidates:
+
+```text
+K must be capped;
+fall back to sequential candidate forwards if OOM risk.
+```
+
+Protocol:
+
+```text
+torch.no_grad();
+same heldout microbatch;
+baseline forward;
+for candidate or candidate batch: temporary detached bias forward;
+restore immediately;
 no backward;
-no optimizer step;
-restore temporary bias;
-record delta;
-repeat on second microbatch only for top candidates if needed.
-```
-
-Noise:
-
-```text
-estimate noise_std from repeated baseline heldout microbatches;
-threshold = max(2 * noise_std, relative_min_gain * current_loss)
+no optimizer step.
 ```
 
 Statuses:
@@ -661,32 +1036,109 @@ duplicate
 conflict
 ```
 
-`v4.3_min_heart` may only generate suggestions, not deploy them.
+No deploy in v4.3.
 
 ---
 
-## 9. Sync run script requirement
+## 11. Required files for implementation
 
-Create one command:
+Create/update code file:
+
+```text
+simple_butterfly_matrix_v4_tape_lane/tape_lane_transport_v4_3_min_heart.py
+```
+
+Base it on fixed v4.2:
+
+```text
+tape_lane_transport_v4_2_fixed.py / tape_lane_transport_v4_2.py
+```
+
+Integrate SafeBlockButterfly directly or import fixed runner safely.
+
+Validation script:
+
+```text
+simple_butterfly_matrix_v4_tape_lane/commands/validate_v4_3_min_heart.sh
+```
+
+Sync run script:
 
 ```text
 simple_butterfly_matrix_v4_tape_lane/commands/sync_run_5ep_v4_3_min_heart_push_logs.sh
 ```
 
-It must:
+---
+
+## 12. CLI/env requirements
+
+### 12.1 Sync script env
+
+`sync_run_5ep_v4_3_min_heart_push_logs.sh` must accept:
 
 ```text
-git pull --ff-only
-validate/compile v4.3
-run 5 epochs
-tee full output to train.log
-save all json/csv/txt/log
-avoid committing .pt files
-commit + push logs
-update AGENT_STATUS.md
+DATA_ROOT
+EPOCHS
+TRAIN_LIMIT
+VAL_LIMIT
+AMP
+OUT_DIR
+BATCH_SIZE
+EVAL_BATCH_SIZE
+WORKERS
+SEED
 ```
 
-User command:
+Do not hardcode these.
+
+### 12.2 CLI flags for code
+
+Required new flags:
+
+```text
+--lambda-route-offdiag-outside-boundary
+--lambda-boundary-budget
+--lambda-detail-head-shortcut
+--lambda-skip-cost
+--lambda-memory-write-cost
+--detail-head-shortcut-target
+--boundary-peak-threshold
+--late-input-start
+--late-input-tau
+--max-candidates-per-epoch
+--heart-window-type epoch
+--enable-candidate-suggestions
+--enable-counterfactual-screen false by default
+--compare-to
+```
+
+Metrics columns must include all cost fields.
+
+---
+
+## 13. Validation requirements
+
+`validate_v4_3_min_heart.sh` must check:
+
+```text
+py_compile v4.3 file;
+v4.3 script imports/runs --help;
+sync script calls tape_lane_transport_v4_3_min_heart.py;
+no active PHASES/class_phase_logits/phase_slot_matrix/phase_balance code;
+trace_feedback writer exists;
+candidate_suggestions writer exists;
+metrics/report include all cost fields;
+detail loss uses attention mass, not top-k;
+offdiag loss uses normalized mass;
+boundary budget exists;
+sync script does not commit .pt/.pth/.ckpt/.safetensors.
+```
+
+---
+
+## 14. Sync run requirement
+
+The one user command must be:
 
 ```bash
 DATA_ROOT=../architecture_builder/data/speechcommands \
@@ -697,13 +1149,43 @@ AMP=fp16 \
 bash simple_butterfly_matrix_v4_tape_lane/commands/sync_run_5ep_v4_3_min_heart_push_logs.sh
 ```
 
-Report dir should include timestamp:
+The script must:
+
+```text
+git pull --ff-only;
+validate/compile;
+run 5 epochs;
+tee stdout/stderr to train.log;
+save json/csv/txt/log;
+not push checkpoints;
+commit + push logs;
+update AGENT_STATUS.md.
+```
+
+Report dir:
 
 ```text
 simple_butterfly_matrix_v4_tape_lane/agent_reports/v4_3_min_heart_YYYYMMDD_HHMMSS/
 ```
 
-Do not push checkpoints:
+---
+
+## 15. Required logs
+
+Each run must produce:
+
+```text
+metrics.csv
+analysis_epoch_XXX.json
+trace_feedback_epoch_XXX.json
+candidate_suggestions_epoch_XXX.json
+REPORT_TO_CHATGPT.txt
+final_report.json
+train.log
+AGENT_STATUS.md
+```
+
+No checkpoints in committed logs:
 
 ```text
 *.pt
@@ -714,184 +1196,154 @@ Do not push checkpoints:
 
 ---
 
-## 10. Success criteria after 5 epochs
+## 16. Success criteria after 5 epochs
 
 Accuracy:
 
 ```text
-must not collapse relative to v4.2 smoke/guided trajectory;
-5 epoch accuracy may be lower than long v3/v4, but should train normally.
+train/val not collapsed;
+accuracy not clearly worse than same-seed v4.2 fixed guided baseline trajectory.
 ```
 
 Route/boundary:
 
 ```text
-route entropy below uniform;
+route_entropy below uniform;
 boundary not flat;
-boundary peaks appear;
-route_offdiag_outside_boundary decreases;
-route_offdiag_inside_boundary is used around peaks.
+boundary_peak_count > 0;
+offdiag_outside_boundary decreases or is controlled;
+offdiag_inside_boundary is used near boundary peaks;
+boundary exploit not present: boundary_mean not near 1 everywhere.
 ```
 
 Input/head:
 
 ```text
-late_input_read does not grow strongly in late steps;
-detail_topread_share is below target / not dominant.
+late_input_by_step not rising strongly in late steps;
+detail_attention_mass below target or decreasing;
+detail_topread_share not dominant.
 ```
 
 Memory:
 
 ```text
-memory write is not constant every step;
-memory has future_read or head consumer if used;
-memory read is not killed by memory write costs.
+memory write not constant every step;
+if memory write high, memory_consumer_score also high;
+memory read not killed.
 ```
 
 Skip/budget:
 
 ```text
-skip_gate does not dominate;
+skip/residual proxy not dominating;
 step_alive not all max;
 operator_complexity_cost logged.
 ```
 
-Candidate suggestions:
+Suggestions:
 
 ```text
-candidate_suggestions_epoch_XXX.json exists;
+candidate_suggestions_epoch_005.json exists;
+max 8-12 candidates;
 diversity fields populated;
-suggestions are plausible and non-duplicate;
-no auto-deploy occurred.
+suggestions are deterministic, plausible, non-duplicate;
+all deploy=false.
 ```
 
 ---
 
-## 11. Implementation checklist
-
-### Code file
-
-Create:
-
-```text
-simple_butterfly_matrix_v4_tape_lane/tape_lane_transport_v4_3_min_heart.py
-```
-
-Base it on fixed v4.2 runner:
-
-```text
-tape_lane_transport_v4_2_fixed.py / tape_lane_transport_v4_2.py
-```
-
-But integrate SafeBlockButterfly directly or import fixed runner safely.
-
-### Add CLI flags
-
-```text
---lambda-route-offdiag-outside-boundary
---lambda-detail-head-shortcut
---lambda-skip-cost
---lambda-memory-write-cost
---detail-head-shortcut-target
---boundary-peak-threshold
---heart-window-type epoch
---enable-candidate-suggestions
---enable-counterfactual-screen false by default
-```
-
-### Loss additions
-
-```text
-route_offdiag_outside_boundary_cost
-late_input_read_cost already exists but log by step
-memory_write_cost
-memory_overwrite_cost
-skip_cost
-detail_head_shortcut_cost
-operator_complexity_cost placeholder if no variants
-```
-
-### Log additions
-
-```text
-trace_feedback_epoch_XXX.json
-candidate_suggestions_epoch_XXX.json
-REPORT_TO_CHATGPT.txt extended
-metrics.csv columns added
-final_report.json
-```
-
-### Validation
-
-Create:
-
-```text
-commands/validate_v4_3_min_heart.sh
-```
-
-Check:
-
-```text
-py_compile
-no old PHASES/class_phase/phase_slot active code
-v4.3 costs exist
-candidate suggestion code exists
-sync script exists
-```
-
----
-
-## 12. Do not do in v4.3
+## 17. Do not do in v4.3
 
 Do not implement:
 
 ```text
-actor
-critic
-TapePlannerAttention
-feedback auto-deploy
-bias baking
-full verify with training steps
-macro promotion
-many workshops
-compound edits
+auto feedback deployment;
+critic;
+actor;
+attention planner;
+macro promotion;
+bias baking;
+train-step counterfactual verify;
+compound edits;
+dense feedback bias;
+multiple workshops applying changes.
 ```
 
-Only:
+Only implement:
 
 ```text
-costed paths
-trace
-suggestions
-logs
-fast 5ep test
+costed paths;
+trace;
+deterministic sparse suggestions;
+logs;
+5ep sync test.
 ```
 
 ---
 
-## 13. Short instruction to the agent
+## 18. Self-check for this plan
 
-Build `v4.3_min_heart` as a conservative bridge from v4.2 to ProgramHeart.
+This section is included to prevent missing critique fixes.
+
+Required critique fixes included:
+
+```text
+[x] feedback vs gradient conflict: future feedback is detach buffer
+[x] learned_context_bias defined as differentiable base-model context bias
+[x] feedback/actor bias not described as differentiable
+[x] window explicitly defined as epoch for v4.3
+[x] counterfactual protocol is forward-only, no train steps
+[x] canonical MVP list unified
+[x] boundary exploit closed with boundary budget/flatness/peak metrics
+[x] offdiag cost normalized and raw+norm logged
+[x] detail shortcut loss uses differentiable attention mass, topread only report
+[x] skip ambiguity resolved with preferred no-extra-skip MVP or paid extra skip
+[x] memory write/read distinction and consumer score specified
+[x] late input depth schedule specified
+[x] deterministic sparse candidate schema and max candidates specified
+[x] same-seed v4.2 baseline comparison required
+[x] context embedding future schema specified
+[x] action embedding future schema specified
+[x] usage EMA lag rule specified
+[x] critic/actor/attention postponed
+[x] standard attention later, no linear attention needed
+[x] batched counterfactual memory cap specified for later
+[x] concrete route basis templates specified for later
+[x] validation checks include all critical code requirements
+[x] sync script env flags specified
+[x] no new design files required before implementation
+```
+
+If an implementation violates any checked item, it is not v4.3_min_heart.
+
+---
+
+## 19. Short instruction to the agent
+
+Build `v4.3_min_heart` as a minimal, conservative bridge.
 
 Do not build the full brain.
 
 Make the body economically meaningful:
 
 ```text
-all paths soft but not free;
-boundary controls cost of cross-lane transport;
-input/head/memory/skip shortcuts are allowed but paid;
-route/boundary behavior is logged and converted into suggestions.
+all paths remain soft;
+no hard masks;
+but all shortcuts are priced;
+boundary makes cross-lane routing cheaper but boundary itself is priced;
+head/detail/input/memory/skip shortcuts are allowed but cannot dominate for free.
 ```
 
 The output of v4.3 should answer:
 
 ```text
-Are the learned separators meaningful?
+Are separators meaningful?
 Are cross-lane routes used mainly at boundaries?
-Is the head avoiding raw-detail shortcut?
+Does boundary exploit happen?
+Does the head avoid raw detail shortcut?
 Is memory used and later consumed?
-What route/boundary actions would the Heart try next?
+Are path costs shaping the program without collapsing accuracy?
+What route/boundary/read/memory/head actions would the future Heart test?
 ```
 
-Only after this is stable should we add feedback deploy, critic, actor, or attention planner.
+Only after those answers are good should the project move to feedback deploy, critic, actor, or attention planner.

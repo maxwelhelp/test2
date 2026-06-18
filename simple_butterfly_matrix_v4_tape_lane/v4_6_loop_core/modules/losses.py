@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Differentiable structural objectives and metrics for v4.6."""
+"""Differentiable structural objectives and metrics for v4.6/v4.6.1."""
 from __future__ import annotations
 
 from typing import Dict
@@ -26,10 +26,10 @@ def allowed_route_mask(lanes: int, *, device=None, dtype=None) -> torch.Tensor:
 
 
 def closed_loop_aux_losses(trace: Dict[str, torch.Tensor], args) -> Dict[str, torch.Tensor]:
-    boundary = trace["boundary"].float()            # [B,T]
-    route = trace["route"].float()                  # [B,T,L,L]
-    weights = trace["primitive_weights"].float()    # [B,T,L,K]
-    signs = trace["primitive_signs"].float()        # [B,T,L,K]
+    boundary = trace["boundary"].float()
+    route = trace["route"].float()
+    weights = trace["primitive_weights"].float()
+    signs = trace["primitive_signs"].float()
     device = boundary.device
     lanes = int(route.shape[-1])
     k = int(weights.shape[-1])
@@ -71,9 +71,35 @@ def closed_loop_aux_losses(trace: Dict[str, torch.Tensor], args) -> Dict[str, to
     primitive_sign_negative_share = (signs < 0).float().mean()
     sign_balance_loss = signs.mean().pow(2)
 
+    group_weights = trace.get("group_weights")
+    if group_weights is not None:
+        gw = group_weights.float()
+        group_entropy = entropy_from_probs(gw, dim=-1).mean()
+        g = int(gw.shape[-1])
+        group_max_ent = torch.log(torch.tensor(float(g), device=device))
+        group_uniform_loss = F.relu(group_entropy - 0.92 * group_max_ent).pow(2)
+        group_top1 = gw.argmax(dim=-1)
+        group_top1_share = torch.bincount(group_top1.reshape(-1), minlength=g).float().max() / float(max(1, group_top1.numel()))
+    else:
+        group_entropy = torch.zeros((), device=device)
+        group_uniform_loss = torch.zeros((), device=device)
+        group_top1_share = torch.zeros((), device=device)
+
     write_gate = trace.get("write_gate")
     mem_write = trace.get("memory_write_norm")
+    mem_read = trace.get("memory_read_norm")
+    mem_infl = trace.get("memory_read_influence")
     logits = trace.get("logits")
+
+    if mem_write is not None and mem_read is not None and mem_infl is not None:
+        target = float(getattr(args, "memory_useful_influence_target", 0.015))
+        # Penalize writing/reading memory only when the measured output/state influence is tiny.
+        memory_junk_loss = (mem_write.float() * mem_read.float() * F.relu(target - mem_infl.float())).mean()
+        memory_influence_mean = mem_infl.float().mean()
+    else:
+        memory_junk_loss = torch.zeros((), device=device)
+        memory_influence_mean = torch.zeros((), device=device)
+
     return {
         "boundary_budget_loss": boundary_budget_loss,
         "boundary_flatness_loss": boundary_flatness_loss,
@@ -94,7 +120,12 @@ def closed_loop_aux_losses(trace: Dict[str, torch.Tensor], args) -> Dict[str, to
         "primitive_entropy": primitive_entropy,
         "primitive_top1_share": primitive_top1_share,
         "primitive_sign_negative_share": primitive_sign_negative_share,
+        "group_entropy": group_entropy,
+        "group_uniform_loss": group_uniform_loss,
+        "group_top1_share": group_top1_share,
         "program_cost": write_gate.float().mean() if write_gate is not None else torch.zeros((), device=device),
         "memory_write_cost": mem_write.float().mean() if mem_write is not None else torch.zeros((), device=device),
+        "memory_influence_mean": memory_influence_mean,
+        "memory_junk_loss": memory_junk_loss,
         "logit_norm": logits.float().pow(2).mean() if logits is not None else torch.zeros((), device=device),
     }

@@ -1,0 +1,7 @@
+loaded datasets: train=12000 val=2000 classes=['yes', 'no', 'up', 'down', 'left', 'right', 'on', 'off', 'stop', 'go']
+V461GroupedLoopCore params=661967 steps=8 lanes=4 D=128 groups=['keep', 'channel', 'correction', 'aggregation', 'memory', 'composition'] K=18 rank=32 route_prior=0.0 device=cuda amp=fp16
+epoch 001/5 train=2.1342/19.05% val=1.7369/33.75% best=33.75%@1 tau=1.000
+epoch 002/5 train=1.5422/40.89% val=1.5206/44.10% best=44.10%@2 tau=0.920
+epoch 003/5 train=1.2993/52.66% val=1.1284/60.45% best=60.45%@3 tau=0.846
+epoch 004/5 train=1.0634/62.41% val=0.9551/66.75% best=66.75%@4 tau=0.779
+epoch 005/5 train=0.8707/69.92% val=0.7317/74.15% best=74.15%@5 tau=0.716

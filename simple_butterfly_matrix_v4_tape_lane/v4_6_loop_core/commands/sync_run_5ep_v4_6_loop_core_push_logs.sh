@@ -6,10 +6,10 @@ BRANCH="${BRANCH:-codex-full-agent-plan}"
 CORE_DIR="simple_butterfly_matrix_v4_tape_lane/v4_6_loop_core"
 MAIN_FILE="$CORE_DIR/tape_lane_transport_v4_6_loop_core.py"
 TS="$(date +%Y%m%d_%H%M%S)"
-REPORT_DIR="${OUT_DIR:-simple_butterfly_matrix_v4_tape_lane/agent_reports/v4_6_loop_core_${TS}}"
+REPORT_DIR="${OUT_DIR:-simple_butterfly_matrix_v4_tape_lane/agent_reports/v4_6_1_grouped_real_${TS}}"
 mkdir -p "$REPORT_DIR"
 
-DATA_ROOT="${DATA_ROOT:-./data/speechcommands}"
+DATA_ROOT="${DATA_ROOT:-../architecture_builder/data/speechcommands}"
 CLASSES="${CLASSES:-yes,no,up,down,left,right,on,off,stop,go}"
 EPOCHS="${EPOCHS:-5}"
 TRAIN_LIMIT="${TRAIN_LIMIT:-12000}"
@@ -23,8 +23,9 @@ AMP="${AMP:-fp16}"
 DIM="${DIM:-128}"
 STEPS="${STEPS:-8}"
 LANES="${LANES:-4}"
-NUM_PRIMITIVES="${NUM_PRIMITIVES:-8}"
+NUM_PRIMITIVES="${NUM_PRIMITIVES:-18}"
 PRIMITIVE_RANK="${PRIMITIVE_RANK:-32}"
+ROUTE_PRIOR_STRENGTH="${ROUTE_PRIOR_STRENGTH:-0.0}"
 LR="${LR:-5e-4}"
 LOG_EVERY="${LOG_EVERY:-100}"
 MAX_TRAIN_BATCHES="${MAX_TRAIN_BATCHES:-0}"
@@ -32,12 +33,21 @@ MAX_VAL_BATCHES="${MAX_VAL_BATCHES:-0}"
 SYNTHETIC_DATA="${SYNTHETIC_DATA:-0}"
 ALLOW_SYNTHETIC_FALLBACK="${ALLOW_SYNTHETIC_FALLBACK:-0}"
 
-printf '[v4.6 sync] branch=%s report_dir=%s\n' "$BRANCH" "$REPORT_DIR" | tee "$REPORT_DIR/run_header.txt"
+printf '[v4.6.1 sync] branch=%s report_dir=%s\n' "$BRANCH" "$REPORT_DIR" | tee "$REPORT_DIR/run_header.txt"
+
+if [ "$SYNTHETIC_DATA" != "0" ]; then
+  echo '[v4.6.1 sync] SYNTHETIC_DATA is disabled for evidence runs. Use validate script RUN_SYNTHETIC_SMOKE=1 only.' | tee -a "$REPORT_DIR/run_header.txt" >&2
+  exit 2
+fi
+if [ "$ALLOW_SYNTHETIC_FALLBACK" != "0" ]; then
+  echo '[v4.6.1 sync] synthetic fallback is disabled for evidence runs.' | tee -a "$REPORT_DIR/run_header.txt" >&2
+  exit 2
+fi
 
 git checkout "$BRANCH"
 git pull --rebase --autostash origin "$BRANCH"
 
-printf '[v4.6 sync] validate\n'
+printf '[v4.6.1 sync] validate\n'
 bash "$CORE_DIR/commands/validate_v4_6_loop_core.sh" | tee "$REPORT_DIR/validate.log"
 
 RUN_ARGS=(
@@ -57,6 +67,7 @@ RUN_ARGS=(
   --lanes "$LANES"
   --num-primitives "$NUM_PRIMITIVES"
   --primitive-rank "$PRIMITIVE_RANK"
+  --route-prior-strength "$ROUTE_PRIOR_STRENGTH"
   --lr "$LR"
   --gumbel-tau-start "${GUMBEL_TAU_START:-1.0}"
   --gumbel-tau-min "${GUMBEL_TAU_MIN:-0.2}"
@@ -80,15 +91,8 @@ RUN_ARGS=(
   --no-save-checkpoints
   --out-dir "$REPORT_DIR"
 )
-
 if [ "${PIN_MEMORY:-1}" != "0" ]; then
   RUN_ARGS+=(--pin-memory)
-fi
-if [ "$SYNTHETIC_DATA" != "0" ]; then
-  RUN_ARGS+=(--synthetic-data)
-fi
-if [ "$ALLOW_SYNTHETIC_FALLBACK" != "0" ]; then
-  RUN_ARGS+=(--allow-synthetic-fallback)
 fi
 
 cat > "$REPORT_DIR/speed_config.txt" <<EOF_CFG
@@ -99,53 +103,50 @@ device=$DEVICE
 amp=$AMP
 dim=$DIM
 steps=$STEPS
+num_primitives=$NUM_PRIMITIVES
 primitive_rank=$PRIMITIVE_RANK
-synthetic_data=$SYNTHETIC_DATA
-allow_synthetic_fallback=$ALLOW_SYNTHETIC_FALLBACK
+route_prior_strength=$ROUTE_PRIOR_STRENGTH
+synthetic_data=disabled
+synthetic_fallback=disabled
 EOF_CFG
 
-printf '[v4.6 sync] run main\n'
+printf '[v4.6.1 sync] run main\n'
 set +e
 python "$MAIN_FILE" "${RUN_ARGS[@]}" 2>&1 | tee "$REPORT_DIR/train.log"
 RUN_STATUS=${PIPESTATUS[0]}
 set -e
 
 echo "$RUN_STATUS" > "$REPORT_DIR/run_status.txt"
-printf '[v4.6 sync] run_status=%s\n' "$RUN_STATUS"
+printf '[v4.6.1 sync] run_status=%s\n' "$RUN_STATUS"
 
 STATUS="$CORE_DIR/AGENT_STATUS.md"
 if [ "$RUN_STATUS" -eq 0 ]; then
   RUN_LABEL="pass"
-  REMAINING="- read $REPORT_DIR/REPORT_TO_CHATGPT.txt and inspect structural flags"
+  REMAINING="- inspect grouped/context/credit reports in $REPORT_DIR"
 else
   RUN_LABEL="fail"
-  REMAINING="- inspect $REPORT_DIR/train.log and $REPORT_DIR/run_status.txt"
+  REMAINING="- inspect $REPORT_DIR/train.log and $REPORT_DIR/run_status.txt; failed artifacts are not committed automatically"
 fi
 cat > "$STATUS" <<EOF_STATUS
 # Agent Status
 
-Current stage: v4.6 loop core MVP
+Current stage: v4.6.1 grouped real-data loop core
 Entrypoint: $MAIN_FILE
 Smoke status: $RUN_LABEL
 Timestamp: $TS
 Report dir: $REPORT_DIR
 Run status: $RUN_STATUS
 
+Evidence rules:
+- synthetic data disabled in sync evidence run
+- route_prior_strength default 0.0
+- grouped primitive selector default 18 primitives
+
 Closed-loop invariant:
 - The controller decision affects execution, execution affects loss, loss gradient updates the controller decision path.
 
-Expected artifacts:
-- metrics.csv
-- trace_epoch_XXX.json
-- REPORT_TO_CHATGPT.txt
-- final_report.json
-- train.log
-- run_status.txt
-
 Known remaining issues:
 $REMAINING
-
-No checkpoints should be committed.
 EOF_STATUS
 
 if [ -f "$REPORT_DIR/final_report.json" ]; then
@@ -174,25 +175,36 @@ except Exception as e:
 PY
 fi
 
-printf '[v4.6 sync] checkpoint guard before git add\n'
+printf '[v4.6.1 sync] cleanup pycache before git add\n'
+find "$CORE_DIR" -type d -name "__pycache__" -prune -exec rm -rf {} +
+
+printf '[v4.6.1 sync] checkpoint guard before git add\n'
 if find "$CORE_DIR" "$REPORT_DIR" -type f \( -name '*.pt' -o -name '*.pth' -o -name '*.ckpt' -o -name '*.safetensors' \) | grep .; then
-  echo '[v4.6 sync] checkpoint-like file found; refusing to commit' >&2
+  echo '[v4.6.1 sync] checkpoint-like file found; refusing to commit' >&2
   exit 4
 fi
 
+if [ "$RUN_STATUS" -ne 0 ]; then
+  git add "$STATUS"
+  git commit -m "Update v4.6.1 failed-run status" || true
+  git push origin "$BRANCH" || true
+  printf '[v4.6.1 sync] done: %s status=%s (failed run artifacts not committed)\n' "$REPORT_DIR" "$RUN_STATUS"
+  exit "$RUN_STATUS"
+fi
+
 git add "$CORE_DIR" "$REPORT_DIR"
-if git diff --cached --name-only | grep -E '\.(pt|pth|ckpt|safetensors)$'; then
-  echo '[v4.6 sync] checkpoint-like file staged; refusing to commit' >&2
+if git diff --cached --name-only | grep -E '\.(pt|pth|ckpt|safetensors|pyc)$'; then
+  echo '[v4.6.1 sync] forbidden file staged; refusing to commit' >&2
   git reset --cached "$CORE_DIR" "$REPORT_DIR" >/dev/null || true
   exit 5
 fi
 
 if git diff --cached --quiet; then
-  printf '[v4.6 sync] nothing to commit\n'
+  printf '[v4.6.1 sync] nothing to commit\n'
 else
-  git commit -m "Add v4.6 loop core run artifacts"
+  git commit -m "Add v4.6.1 grouped real-data run artifacts"
   git push origin "$BRANCH"
 fi
 
-printf '[v4.6 sync] done: %s status=%s\n' "$REPORT_DIR" "$RUN_STATUS"
+printf '[v4.6.1 sync] done: %s status=%s\n' "$REPORT_DIR" "$RUN_STATUS"
 exit "$RUN_STATUS"

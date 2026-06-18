@@ -115,9 +115,30 @@ def make_synthetic_loaders(args):
     return train_loader, val_loader, classes, counts, val_counts
 
 
+def _patch_v42_loader_args(args) -> None:
+    """Compatibility fields expected by the old v4.2 SpeechCommands loader."""
+    defaults = {
+        "synthetic": False,
+        "download": False,
+        "seconds": 1.0,
+        "synthetic_length": max(
+            512,
+            int(float(getattr(args, "synthetic_seconds", 0.2)) * int(getattr(args, "sample_rate", 16000))),
+        ),
+        "pin_memory": False,
+        "workers": 0,
+        "eval_batch_size": int(getattr(args, "batch_size", 128)),
+    }
+    for name, value in defaults.items():
+        if not hasattr(args, name):
+            setattr(args, name, value)
+
+
 def make_loaders(args):
     if bool(args.synthetic_data):
         return make_synthetic_loaders(args)
+
+    _patch_v42_loader_args(args)
     try:
         from simple_butterfly_matrix_v4_tape_lane import tape_lane_transport_v4_2_fixed as fixed  # type: ignore
         v42 = fixed.v42
@@ -127,10 +148,9 @@ def make_loaders(args):
             print(f"[v4.6] real loader failed, using synthetic fallback: {exc}", flush=True)
             return make_synthetic_loaders(args)
         raise RuntimeError(
-            "failed to build real SpeechCommands loaders. Use --synthetic-data for smoke tests "
-            "or set DATA_ROOT/--data-root to the real dataset."
+            "failed to build real SpeechCommands loaders. Set DATA_ROOT/--data-root to the real dataset, "
+            "or use SYNTHETIC_DATA=1 for a smoke-only run."
         ) from exc
-
 
 class ConvWaveFrontend(nn.Module):
     """Simple matrix-friendly 1D frontend that returns [B,T,D]."""
@@ -494,7 +514,7 @@ def run(args) -> None:
 
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="v4.6 differentiable loop core")
-    p.add_argument("--data-root", default="./data/speechcommands")
+    p.add_argument("--data-root", default="../architecture_builder/data/speechcommands")
     p.add_argument("--classes", default="yes,no,up,down,left,right,on,off,stop,go")
     p.add_argument("--epochs", type=int, default=5)
     p.add_argument("--train-limit", type=int, default=12000)
@@ -503,6 +523,10 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--eval-batch-size", type=int, default=256)
     p.add_argument("--workers", type=int, default=4)
     p.add_argument("--pin-memory", action="store_true")
+    p.add_argument("--download", action="store_true")
+    p.add_argument("--seconds", type=float, default=1.0)
+    p.add_argument("--synthetic", action="store_true", help="compat flag for old loader; prefer --synthetic-data")
+    p.add_argument("--synthetic-length", type=int, default=3200)
     p.add_argument("--synthetic-data", action="store_true")
     p.add_argument("--allow-synthetic-fallback", action="store_true")
     p.add_argument("--sample-rate", type=int, default=16000)

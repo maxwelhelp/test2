@@ -1,0 +1,66 @@
+{
+  "epoch": 4,
+  "window": {
+    "type": "epoch",
+    "index": 4
+  },
+  "version": "v4.3_min_heart_canonical",
+  "candidates": [
+    {
+      "source": "boundary_specialization_rule",
+      "target_type": "boundary",
+      "location": {
+        "t": "all"
+      },
+      "action": "increase",
+      "target": "boundary_peak_contrast",
+      "reason": "boundary is flat or has no hard peaks; program stages are not separated",
+      "evidence_metrics": {
+        "boundary_peak_count": 0,
+        "boundary_soft_peak_count": 1.776566982269287,
+        "boundary_flatness": 2.47107803102985e-08
+      },
+      "risk": "medium",
+      "delta_scale": 0.03,
+      "deploy": false
+    },
+    {
+      "source": "memory_consumer_rule",
+      "target_type": "route",
+      "location": {
+        "from_lane": "memory",
+        "to_lane": "state"
+      },
+      "action": "increase",
+      "target": "route.memory->state",
+      "reason": "memory appears useful; future Heart should test memory->state route rather than killing memory",
+      "evidence_metrics": {
+        "memory_write": 0.501483142375946,
+        "memory_consumer_proxy": 0.4264146685600281
+      },
+      "risk": "low",
+      "delta_scale": 0.03,
+      "deploy": false
+    }
+  ],
+  "diversity": {
+    "by_source": {
+      "boundary_specialization_rule": 1,
+      "memory_consumer_rule": 1
+    },
+    "by_target_type": {
+      "boundary": 1,
+      "route": 1
+    },
+    "by_step": {
+      "all": 1
+    },
+    "by_lane": {},
+    "selected_candidates": 2,
+    "attempted_candidates": 2,
+    "skipped_duplicates": 0,
+    "duplicate_rate": 0.0,
+    "max_candidates_effective": 8,
+    "attempted_after_filter": 2
+  }
+}

@@ -1,0 +1,3 @@
+[v4.5 sync] run -> simple_butterfly_matrix_v4_tape_lane/agent_reports/v4_5_projection_feedback_20260618_194210
+SCOUT_FEEDBACK_PATH=simple_butterfly_matrix_v4_tape_lane/agent_reports/v4_4_context_controllers_20260618_174455/scout_runtime_feedback_epoch_001.json
+SCOUT_FEEDBACK_SCALE=0.015

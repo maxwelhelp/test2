@@ -25,6 +25,14 @@ import os
 import sys
 from pathlib import Path
 
+# When this file is executed directly as
+#   python simple_butterfly_matrix_v4_tape_lane/tape_lane_transport_v4_5_projection_feedback.py
+# Python puts the package directory, not the repository root, on sys.path.
+# Add repo root explicitly so package imports work from the sync scripts.
+_REPO_ROOT_FOR_IMPORT = Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT_FOR_IMPORT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT_FOR_IMPORT))
+
 from simple_butterfly_matrix_v4_tape_lane import tape_lane_transport_v4_4_context_controllers as v44
 
 PROJECT_DIR = v44.PROJECT_DIR

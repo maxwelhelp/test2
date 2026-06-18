@@ -68,7 +68,18 @@ python "$MAIN_FILE" \
   --class-lane-init-strength "${CLASS_LANE_INIT_STRENGTH:-0.10}" \
   --lane-prior-strength "${LANE_PRIOR_STRENGTH:-0.20}" \
   --lambda-route-offdiag-outside-boundary "${LAMBDA_ROUTE_OFFDIAG_OUTSIDE_BOUNDARY:-0.012}" \
+  --lambda-route-allowed "${LAMBDA_ROUTE_ALLOWED:-0.020}" \
+  --lambda-route-uniform "${LAMBDA_ROUTE_UNIFORM:-0.020}" \
+  --route-entropy-specialize-max "${ROUTE_ENTROPY_SPECIALIZE_MAX:-1.15}" \
   --lambda-boundary-budget "${LAMBDA_BOUNDARY_BUDGET:-0.006}" \
+  --lambda-boundary-peak "${LAMBDA_BOUNDARY_PEAK:-0.010}" \
+  --lambda-boundary-flatness "${LAMBDA_BOUNDARY_FLATNESS:-0.006}" \
+  --lambda-boundary-usefulness "${LAMBDA_BOUNDARY_USEFULNESS:-0.010}" \
+  --boundary-min-peaks "${BOUNDARY_MIN_PEAKS:-2.0}" \
+  --boundary-max-peaks "${BOUNDARY_MAX_PEAKS:-4.0}" \
+  --boundary-peak-tau "${BOUNDARY_PEAK_TAU:-0.04}" \
+  --boundary-flatness-target "${BOUNDARY_FLATNESS_TARGET:-0.06}" \
+  --boundary-usefulness-target "${BOUNDARY_USEFULNESS_TARGET:-0.012}" \
   --lambda-late-input-read "${LAMBDA_LATE_INPUT_READ:-0.012}" \
   --lambda-memory-write-cost "${LAMBDA_MEMORY_WRITE_COST:-0.003}" \
   --lambda-memory-overwrite "${LAMBDA_MEMORY_OVERWRITE:-0.004}" \
@@ -76,7 +87,7 @@ python "$MAIN_FILE" \
   --lambda-detail-head-shortcut "${LAMBDA_DETAIL_HEAD_SHORTCUT:-0.010}" \
   --lambda-skip-cost "${LAMBDA_SKIP_COST:-0.0}" \
   --lambda-operator-complexity "${LAMBDA_OPERATOR_COMPLEXITY:-0.0}" \
-  --detail-head-shortcut-target "${DETAIL_HEAD_SHORTCUT_TARGET:-0.42}" \
+  --detail-head-shortcut-target "${DETAIL_HEAD_SHORTCUT_TARGET:-0.28}" \
   --boundary-peak-threshold "${BOUNDARY_PEAK_THRESHOLD:-0.35}" \
   --late-input-start "${LATE_INPUT_START:-0.45}" \
   --late-input-tau "${LATE_INPUT_TAU:-0.12}" \

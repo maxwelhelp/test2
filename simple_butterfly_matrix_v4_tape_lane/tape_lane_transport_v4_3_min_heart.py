@@ -44,6 +44,7 @@ PRIMITIVES = v42.PRIMITIVES
 
 _LANE_SLOT_CACHE: Dict[Tuple[int, int, int, str, str, bool], torch.Tensor] = {}
 _EYE_CACHE: Dict[Tuple[int, str, str], torch.Tensor] = {}
+_ROUTE_ALLOWED_CACHE: Dict[Tuple[int, str, str], torch.Tensor] = {}
 
 
 def lane_name(i: int) -> str:
@@ -91,6 +92,23 @@ def _cached_eye(n: int, device: torch.device, dtype: torch.dtype) -> torch.Tenso
     if cached is None:
         cached = torch.eye(n, device=device, dtype=dtype)
         _EYE_CACHE[key] = cached
+    return cached
+
+
+def _cached_route_allowed_mask(lanes: int, device: torch.device, dtype: torch.dtype) -> torch.Tensor:
+    key = (int(lanes), _device_key(device), str(dtype))
+    cached = _ROUTE_ALLOWED_CACHE.get(key)
+    if cached is None:
+        mask = torch.eye(lanes, device=device, dtype=dtype)
+        if lanes >= 2:
+            mask[0, 1] = 1.0  # detail -> state
+        if lanes >= 3:
+            mask[1, 2] = 1.0  # state -> abstract
+        if lanes >= 4:
+            mask[1, 3] = 1.0  # state -> memory
+            mask[3, 1] = 1.0  # memory -> state
+        cached = mask
+        _ROUTE_ALLOWED_CACHE[key] = cached
     return cached
 
 
@@ -257,8 +275,15 @@ def route_economy_terms(baux, args) -> Dict[str, torch.Tensor]:
             "route_offdiag_outside_boundary_cost": z,
             "boundary_budget_cost": z,
             "boundary_flatness": z,
+            "boundary_peak_cost": z,
+            "boundary_flatness_cost": z,
             "boundary_peak_count": z,
+            "boundary_soft_peak_count": z,
             "sequence_route_delta_mean": z,
+            "route_allowed_mass": z,
+            "route_disallowed_mass": z,
+            "route_allowed_cost": z,
+            "route_uniform_cost": z,
         }
     lanes = routes.shape[-1]
     eye = _cached_eye(lanes, routes.device, routes.dtype)
@@ -272,6 +297,25 @@ def route_economy_terms(baux, args) -> Dict[str, torch.Tensor]:
         route_delta = (routes[1:] - routes[:-1]).abs().mean(dim=(-2, -1)).mean()
     else:
         route_delta = torch.zeros((), device=routes.device)
+    allowed = _cached_route_allowed_mask(lanes, routes.device, routes.dtype)
+    disallowed = (1.0 - allowed).view(1, lanes, lanes)
+    allowed_mass = (routes * allowed.view(1, lanes, lanes)).sum(dim=-1).mean()
+    disallowed_mass = (routes * disallowed).sum(dim=-1).mean()
+    entropy_mean = baux.route_entropy.float().mean() if baux.route_entropy.numel() else torch.zeros((), device=routes.device)
+    route_uniform_cost = F.relu(entropy_mean - float(args.route_entropy_specialize_max)).pow(2)
+    if boundary.numel():
+        peak_soft = torch.sigmoid(
+            (boundary - float(args.boundary_peak_threshold)) / max(1e-6, float(args.boundary_peak_tau))
+        ).sum()
+        boundary_flatness = boundary.std(unbiased=False) if boundary.numel() > 1 else torch.zeros((), device=routes.device)
+        boundary_peak_cost = F.relu(float(args.boundary_min_peaks) - peak_soft).pow(2)
+        boundary_peak_cost = boundary_peak_cost + F.relu(peak_soft - float(args.boundary_max_peaks)).pow(2)
+        boundary_flatness_cost = F.relu(float(args.boundary_flatness_target) - boundary_flatness).pow(2)
+    else:
+        peak_soft = torch.zeros((), device=routes.device)
+        boundary_flatness = torch.zeros((), device=routes.device)
+        boundary_peak_cost = torch.zeros((), device=routes.device)
+        boundary_flatness_cost = torch.zeros((), device=routes.device)
     return {
         "route_offdiag_raw_mean": raw.mean(),
         "route_offdiag_norm_mean": norm.mean(),
@@ -279,9 +323,16 @@ def route_economy_terms(baux, args) -> Dict[str, torch.Tensor]:
         "route_offdiag_outside_boundary": outside.mean(),
         "route_offdiag_outside_boundary_cost": outside.mean(),
         "boundary_budget_cost": boundary.mean() if boundary.numel() else torch.zeros((), device=routes.device),
-        "boundary_flatness": boundary.std(unbiased=False) if boundary.numel() > 1 else torch.zeros((), device=routes.device),
+        "boundary_flatness": boundary_flatness,
+        "boundary_peak_cost": boundary_peak_cost,
+        "boundary_flatness_cost": boundary_flatness_cost,
         "boundary_peak_count": (boundary > float(args.boundary_peak_threshold)).float().sum(),
+        "boundary_soft_peak_count": peak_soft,
         "sequence_route_delta_mean": route_delta,
+        "route_allowed_mass": allowed_mass,
+        "route_disallowed_mass": disallowed_mass,
+        "route_allowed_cost": disallowed_mass,
+        "route_uniform_cost": route_uniform_cost,
     }
 
 def _route_extra_terms_from_routes(routes: torch.Tensor, lanes: int) -> Dict[str, torch.Tensor]:
@@ -393,6 +444,25 @@ def sequence_terms(baux, args) -> Dict[str, torch.Tensor]:
     else:
         read_delta_mean = torch.zeros((), device=device)
     route_extra = _route_extra_terms_from_routes(routes, int(args.lanes))
+    boundary = baux.boundaries.float()
+    if boundary.numel():
+        route_step = (routes[1:] - routes[:-1]).abs().mean(dim=(-2, -1)) if routes.numel() and routes.shape[0] > 1 else torch.empty(0, device=device)
+        prim_step = (prim[1:] - prim[:-1]).abs().mean(dim=(-2, -1)) if prim.numel() and prim.shape[0] > 1 else torch.empty(0, device=device)
+        read_step = (read[1:] - read[:-1]).abs().mean(dim=(-2, -1)) if read.numel() and read.shape[0] > 1 else torch.empty(0, device=device)
+        if upd.numel() and upd.shape[1] > 1:
+            upd_by_t = upd.mean(dim=(0, 3))
+            upd_step = (upd_by_t[1:] - upd_by_t[:-1]).abs().mean(dim=-1)
+        else:
+            upd_step = torch.empty(0, device=device)
+        common = min(int(boundary.shape[0]), int(route_step.shape[0]), int(prim_step.shape[0]), int(read_step.shape[0]), int(upd_step.shape[0]))
+        if common:
+            seq_by_step = route_step[:common] + prim_step[:common] + read_step[:common] + upd_step[:common]
+            denom = seq_by_step.detach().mean().clamp_min(1e-6)
+            boundary_usefulness = (boundary[:common] * ((seq_by_step / denom) - 1.0)).mean()
+        else:
+            boundary_usefulness = torch.zeros((), device=device)
+    else:
+        boundary_usefulness = torch.zeros((), device=device)
     return {
         "sequence_route_delta_mean": route_delta_mean,
         "sequence_primitive_delta_mean": prim_delta_mean,
@@ -401,6 +471,8 @@ def sequence_terms(baux, args) -> Dict[str, torch.Tensor]:
         "sequence_nonflat_score": route_delta_mean + prim_delta_mean + upd_delta_mean + read_delta_mean,
         "self_route_mass": route_extra["self_route_mass"].to(device),
         "useful_transition_mass": route_extra["useful_transition_mass"].to(device),
+        "boundary_usefulness_cost": F.relu(float(args.boundary_usefulness_target) - boundary_usefulness).pow(2),
+        "boundary_usefulness_proxy": boundary_usefulness.detach(),
     }
 
 
@@ -419,6 +491,8 @@ def aux_losses_v43(logits: torch.Tensor, baux, haux: Dict[str, torch.Tensor], ar
     out["late_input_read_cost"] = late_input_cost_from_read(baux, args)
     out["detail_attention_mass"] = detail_mass
     out["detail_head_shortcut_cost"] = detail_cost
+    out["boundary_usefulness_cost"] = seq["boundary_usefulness_cost"]
+    out["boundary_usefulness_proxy"] = seq["boundary_usefulness_proxy"]
     out["skip_gate_mean"] = torch.zeros((), device=logits.device)
     out["skip_cost"] = torch.zeros((), device=logits.device)
     out["update_collapse_proxy"] = residual_proxy.detach()
@@ -455,7 +529,12 @@ def train_epoch(model, loader, opt, scaler, device, dtype, args, epoch: int):
             loss = loss + args.lambda_route_entropy * losses["route_entropy_band"]
             loss = loss + args.lambda_step_alive_budget * losses["step_alive_budget"]
             loss = loss + args.lambda_route_offdiag_outside_boundary * losses["route_offdiag_outside_boundary_cost"]
+            loss = loss + args.lambda_route_allowed * losses["route_allowed_cost"]
+            loss = loss + args.lambda_route_uniform * losses["route_uniform_cost"]
             loss = loss + args.lambda_boundary_budget * losses["boundary_budget_cost"]
+            loss = loss + args.lambda_boundary_peak * losses["boundary_peak_cost"]
+            loss = loss + args.lambda_boundary_flatness * losses["boundary_flatness_cost"]
+            loss = loss + args.lambda_boundary_usefulness * losses["boundary_usefulness_cost"]
             loss = loss + args.lambda_late_input_read * losses["late_input_read_cost"]
             memory_warmup = max(1, int(getattr(args, "memory_write_warmup_epochs", 2)))
             memory_scale = min(1.0, float(epoch) / float(memory_warmup))
@@ -636,6 +715,9 @@ def build_trace_feedback(rep: Dict, args, epoch: int) -> Dict:
         useful_transition_by_step = route_extra["useful_transition_by_step"]
         self_route_mass = float(route_extra["self_route_mass"])
         useful_transition_mass = float(route_extra["useful_transition_mass"])
+        allowed = _cached_route_allowed_mask(routes.shape[-1], routes.device, routes.dtype)
+        route_allowed_mass = float((routes * allowed.view(1, routes.shape[-1], routes.shape[-1])).sum(dim=-1).mean())
+        route_disallowed_mass = float((routes * (1.0 - allowed).view(1, routes.shape[-1], routes.shape[-1])).sum(dim=-1).mean())
     else:
         offdiag_raw = torch.empty(0)
         offdiag_norm = torch.empty(0)
@@ -643,6 +725,8 @@ def build_trace_feedback(rep: Dict, args, epoch: int) -> Dict:
         useful_transition_by_step = torch.empty(0)
         self_route_mass = 0.0
         useful_transition_mass = 0.0
+        route_allowed_mass = 0.0
+        route_disallowed_mass = 0.0
     if boundary.numel() and offdiag_norm.numel():
         inside = offdiag_norm * boundary
         outside = offdiag_norm * (1.0 - boundary)
@@ -695,6 +779,12 @@ def build_trace_feedback(rep: Dict, args, epoch: int) -> Dict:
     peaks = [i for i, v in enumerate(boundary_list) if v >= peak_thr]
     boundary_mean = sum(boundary_list) / max(1, len(boundary_list))
     boundary_flatness = (sum((v - boundary_mean) ** 2 for v in boundary_list) / max(1, len(boundary_list))) ** 0.5 if boundary_list else 0.0
+    if boundary.numel():
+        boundary_soft_peak_count = float(torch.sigmoid(
+            (boundary - float(args.boundary_peak_threshold)) / max(1e-6, float(args.boundary_peak_tau))
+        ).sum())
+    else:
+        boundary_soft_peak_count = 0.0
     primitive_weights = rep.get("primitive_weights", [])
     seq_nonflat = float(seq_change.mean()) if seq_change.numel() else 0.0
     memory_consumer_proxy = memory_future_read + head_memory
@@ -735,10 +825,13 @@ def build_trace_feedback(rep: Dict, args, epoch: int) -> Dict:
             "useful_transition_by_step": useful_transition_by_step.tolist() if useful_transition_by_step.numel() else [],
             "self_route_mass": self_route_mass,
             "useful_transition_mass": useful_transition_mass,
+            "allowed_route_mass": route_allowed_mass,
+            "disallowed_route_mass": route_disallowed_mass,
             "boundary_by_step": boundary_list,
             "boundary_mean": boundary_mean,
             "boundary_flatness": boundary_flatness,
             "boundary_peak_count": len(peaks),
+            "boundary_soft_peak_count": boundary_soft_peak_count,
             "boundary_peaks": peaks,
             "boundary_usefulness": usefulness.tolist() if usefulness.numel() else [],
         },
@@ -788,6 +881,22 @@ def generate_candidate_suggestions(trace: Dict, args, epoch: int) -> Dict:
     usefulness = route.get("boundary_usefulness", []) or []
     seq_change = seq.get("sequence_change_by_step", []) or []
     outside = route.get("offdiag_outside_boundary", []) or []
+
+    if int(route.get("boundary_peak_count", 0) or 0) == 0 or float(route.get("boundary_flatness", 0.0) or 0.0) < float(args.boundary_flatness_target):
+        add({
+            "source": "boundary_specialization_rule",
+            "target_type": "boundary",
+            "location": {"t": "all"},
+            "action": "increase",
+            "target": "boundary_peak_contrast",
+            "reason": "boundary is flat or has no hard peaks; program stages are not separated",
+            "evidence_metrics": {
+                "boundary_peak_count": route.get("boundary_peak_count", 0),
+                "boundary_soft_peak_count": route.get("boundary_soft_peak_count", 0.0),
+                "boundary_flatness": route.get("boundary_flatness", 0.0),
+            },
+            "risk": "medium",
+        })
 
     for t, b in enumerate(boundary):
         u = usefulness[t] if t < len(usefulness) else 0.0
@@ -953,6 +1062,8 @@ def write_chatgpt_report(out_dir: Path, analysis: Dict, trace: Dict, candidates:
         f"- offdiag_outside_boundary_cost: {float(route.get('offdiag_outside_boundary_cost', 0.0)):.4f}",
         f"- self_route_mass: {float(route.get('self_route_mass', 0.0)):.4f}",
         f"- useful_transition_mass: {float(route.get('useful_transition_mass', 0.0)):.4f}",
+        f"- allowed/disallowed_route_mass: {float(route.get('allowed_route_mass', 0.0)):.4f}/{float(route.get('disallowed_route_mass', 0.0)):.4f}",
+        f"- boundary_soft_peak_count: {float(route.get('boundary_soft_peak_count', 0.0)):.4f}",
         f"- collapse_flags: {','.join(trace.get('collapse_flags', []) or []) if trace.get('collapse_flags') else 'NONE'}",
         "",
         "Sequence:",
@@ -1027,7 +1138,10 @@ def run(args) -> None:
         "epoch", "train_loss", "train_ce", "train_acc", "val_loss", "val_acc", "best_acc",
         "write_budget", "update_alive", "class_read_div", "lane_balance", "slot_div",
         "route_entropy_band", "step_alive_budget", "route_offdiag_outside_boundary_cost",
-        "boundary_budget_cost", "boundary_flatness", "boundary_peak_count", "late_input_read_cost",
+        "route_allowed_mass", "route_disallowed_mass", "route_allowed_cost", "route_uniform_cost",
+        "boundary_budget_cost", "boundary_flatness", "boundary_peak_count", "boundary_soft_peak_count",
+        "boundary_peak_cost", "boundary_flatness_cost", "boundary_usefulness_cost", "boundary_usefulness_proxy",
+        "late_input_read_cost",
         "memory_write_cost", "memory_overwrite_cost", "memory_write_gate", "memory_future_read",
         "memory_head_consumer", "memory_consumer_score", "detail_attention_mass", "detail_head_shortcut_cost",
         "skip_gate_mean", "skip_cost", "update_collapse_proxy", "residual_dominance_proxy", "operator_complexity_cost",
@@ -1130,13 +1244,24 @@ def parser() -> argparse.ArgumentParser:
     p = v42.parser()
     p.set_defaults(out_dir="./simple_butterfly_matrix_v4_tape_lane/runs/speechcommands_5ep_v4_3_min_heart")
     p.add_argument("--lambda-route-offdiag-outside-boundary", type=float, default=0.012)
+    p.add_argument("--lambda-route-allowed", type=float, default=0.020)
+    p.add_argument("--lambda-route-uniform", type=float, default=0.020)
+    p.add_argument("--route-entropy-specialize-max", type=float, default=1.15)
     # Reuses existing --lambda-boundary-budget, but v4.3 semantics are mean(boundary), not target MSE.
+    p.add_argument("--lambda-boundary-peak", type=float, default=0.010)
+    p.add_argument("--lambda-boundary-flatness", type=float, default=0.006)
+    p.add_argument("--lambda-boundary-usefulness", type=float, default=0.010)
+    p.add_argument("--boundary-min-peaks", type=float, default=2.0)
+    p.add_argument("--boundary-max-peaks", type=float, default=4.0)
+    p.add_argument("--boundary-peak-tau", type=float, default=0.04)
+    p.add_argument("--boundary-flatness-target", type=float, default=0.06)
+    p.add_argument("--boundary-usefulness-target", type=float, default=0.012)
     p.add_argument("--lambda-detail-head-shortcut", type=float, default=0.010)
     p.add_argument("--lambda-skip-cost", type=float, default=0.0)
     p.add_argument("--lambda-memory-write-cost", type=float, default=0.003)
     p.add_argument("--lambda-operator-complexity", type=float, default=0.0)
     p.add_argument("--memory-write-warmup-epochs", type=int, default=2)
-    p.add_argument("--detail-head-shortcut-target", type=float, default=0.42)
+    p.add_argument("--detail-head-shortcut-target", type=float, default=0.28)
     p.add_argument("--boundary-peak-threshold", type=float, default=0.35)
     p.add_argument("--late-input-start", type=float, default=0.45)
     p.add_argument("--late-input-tau", type=float, default=0.12)

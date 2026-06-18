@@ -1,0 +1,12 @@
+loaded datasets: train=12000 val=2000 classes=['yes', 'no', 'up', 'down', 'left', 'right', 'on', 'off', 'stop', 'go']
+TapeLaneRouter v4.3_min_heart params=1522851 T=12 lanes=4 cells=12 D=96 pairs=12 device=cuda amp=fp16
+epoch 001 step 00050 loss=2.2351 ce=2.2023 acc=15.94%
+epoch 001/5 train=2.1641/19.13% val=2.0050/24.90% best=24.90%@1 seq=0.0170 boundary_peaks=0
+epoch 002 step 00050 loss=1.9811 ce=1.9484 acc=27.42%
+epoch 002/5 train=1.9627/27.87% val=1.9082/28.35% best=28.35%@2 seq=0.0181 boundary_peaks=0
+epoch 003 step 00050 loss=1.8545 ce=1.8222 acc=32.28%
+epoch 003/5 train=1.8145/33.93% val=1.7796/33.85% best=33.85%@3 seq=0.0236 boundary_peaks=0
+epoch 004 step 00050 loss=1.7306 ce=1.6985 acc=36.88%
+epoch 004/5 train=1.6894/38.30% val=1.5772/40.50% best=40.50%@4 seq=0.0264 boundary_peaks=0
+epoch 005 step 00050 loss=1.5609 ce=1.5286 acc=43.02%
+epoch 005/5 train=1.5646/43.38% val=1.5402/40.70% best=40.70%@5 seq=0.0338 boundary_peaks=0

@@ -1,0 +1,45 @@
+{
+  "loss": 2.2990498542785645,
+  "checks": {
+    "route": {
+      "grad_abs_sum": 0.0038630017079412937,
+      "found": [
+        "backbone.route_logits"
+      ],
+      "ok": true
+    },
+    "boundary": {
+      "grad_abs_sum": 0.0007789183873683214,
+      "found": [
+        "backbone.boundary_logit"
+      ],
+      "ok": true
+    },
+    "read": {
+      "grad_abs_sum": 0.04934290796518326,
+      "found": [
+        "backbone.read_group_logits",
+        "backbone.read_query_w"
+      ],
+      "ok": true
+    },
+    "write": {
+      "grad_abs_sum": 0.003724662121385336,
+      "found": [
+        "backbone.write_gate_logit"
+      ],
+      "ok": true
+    },
+    "head": {
+      "grad_abs_sum": 19.58698074729182,
+      "found": [
+        "head.class_lane_logits",
+        "head.key_w",
+        "head.value_w",
+        "head.class_q"
+      ],
+      "ok": true
+    }
+  },
+  "ok": true
+}

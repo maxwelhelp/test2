@@ -1,0 +1,47 @@
+REPORT_TO_CHATGPT
+
+Версия: v4.3_min_heart
+Лучший val_acc: 40.70% @ epoch 5
+Текущий epoch/window: 5
+compare_to: v4.2_fixed_guided same seed/config or baseline_missing
+
+Главное по v4.3:
+- Это НЕ actor/critic/planner и НЕ auto-deploy.
+- Это costed paths + trace + deterministic candidate suggestions.
+- Последовательность должна возникать через разные tape positions, boundary peaks и изменение route/read/primitive по t.
+
+Route / boundary:
+- route_entropy_mean: 1.3720
+- boundary_mean: 0.2559
+- boundary_flatness/std: 0.0006
+- boundary_peak_count: 0 peaks=[]
+- offdiag_outside_boundary_cost: 0.5055
+
+Sequence:
+- active tape steps step_alive>=0.50: [0, 1, 2, 3, 4, 5, 6]
+- sequence_nonflat_score: 0.0338
+
+Shortcuts / memory:
+- late_input_cost: 0.0816
+- detail_attention_mass: 0.2818
+- detail_topread_share(report-only): 0.9182
+- memory_write_mean: 0.4125
+- memory_consumer_score: 0.4547
+
+Candidate suggestions:
+- route decrease offdiag_outside_boundary at {'t': 0} | cross-lane routing is high outside boundary | deploy=False
+- route decrease offdiag_outside_boundary at {'t': 1} | cross-lane routing is high outside boundary | deploy=False
+- route decrease offdiag_outside_boundary at {'t': 2} | cross-lane routing is high outside boundary | deploy=False
+- route decrease offdiag_outside_boundary at {'t': 3} | cross-lane routing is high outside boundary | deploy=False
+- route decrease offdiag_outside_boundary at {'t': 4} | cross-lane routing is high outside boundary | deploy=False
+- route decrease offdiag_outside_boundary at {'t': 5} | cross-lane routing is high outside boundary | deploy=False
+- route decrease offdiag_outside_boundary at {'t': 6} | cross-lane routing is high outside boundary | deploy=False
+- route decrease offdiag_outside_boundary at {'t': 7} | cross-lane routing is high outside boundary | deploy=False
+
+Артефакты:
+- metrics.csv
+- analysis_epoch_XXX.json
+- trace_feedback_epoch_XXX.json
+- candidate_suggestions_epoch_XXX.json
+- final_report.json
+- train.log если запускался sync script

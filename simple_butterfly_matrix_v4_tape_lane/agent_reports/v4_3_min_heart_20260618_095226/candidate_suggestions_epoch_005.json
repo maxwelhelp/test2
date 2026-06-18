@@ -1,0 +1,167 @@
+{
+  "epoch": 5,
+  "window": {
+    "type": "epoch",
+    "index": 5
+  },
+  "version": "v4.3_min_heart",
+  "candidates": [
+    {
+      "source": "route_boundary_rule",
+      "target_type": "route",
+      "location": {
+        "t": 0
+      },
+      "action": "decrease",
+      "target": "offdiag_outside_boundary",
+      "reason": "cross-lane routing is high outside boundary",
+      "evidence_metrics": {
+        "offdiag_outside_boundary": 0.5302560925483704,
+        "boundary": 0.25407060980796814
+      },
+      "risk": "medium",
+      "delta_scale": 0.03,
+      "deploy": false
+    },
+    {
+      "source": "route_boundary_rule",
+      "target_type": "route",
+      "location": {
+        "t": 1
+      },
+      "action": "decrease",
+      "target": "offdiag_outside_boundary",
+      "reason": "cross-lane routing is high outside boundary",
+      "evidence_metrics": {
+        "offdiag_outside_boundary": 0.52725750207901,
+        "boundary": 0.2561630308628082
+      },
+      "risk": "medium",
+      "delta_scale": 0.03,
+      "deploy": false
+    },
+    {
+      "source": "route_boundary_rule",
+      "target_type": "route",
+      "location": {
+        "t": 2
+      },
+      "action": "decrease",
+      "target": "offdiag_outside_boundary",
+      "reason": "cross-lane routing is high outside boundary",
+      "evidence_metrics": {
+        "offdiag_outside_boundary": 0.5238941311836243,
+        "boundary": 0.2564697265625
+      },
+      "risk": "medium",
+      "delta_scale": 0.03,
+      "deploy": false
+    },
+    {
+      "source": "route_boundary_rule",
+      "target_type": "route",
+      "location": {
+        "t": 3
+      },
+      "action": "decrease",
+      "target": "offdiag_outside_boundary",
+      "reason": "cross-lane routing is high outside boundary",
+      "evidence_metrics": {
+        "offdiag_outside_boundary": 0.5203419327735901,
+        "boundary": 0.256442666053772
+      },
+      "risk": "medium",
+      "delta_scale": 0.03,
+      "deploy": false
+    },
+    {
+      "source": "route_boundary_rule",
+      "target_type": "route",
+      "location": {
+        "t": 4
+      },
+      "action": "decrease",
+      "target": "offdiag_outside_boundary",
+      "reason": "cross-lane routing is high outside boundary",
+      "evidence_metrics": {
+        "offdiag_outside_boundary": 0.516461968421936,
+        "boundary": 0.25635451078414917
+      },
+      "risk": "medium",
+      "delta_scale": 0.03,
+      "deploy": false
+    },
+    {
+      "source": "route_boundary_rule",
+      "target_type": "route",
+      "location": {
+        "t": 5
+      },
+      "action": "decrease",
+      "target": "offdiag_outside_boundary",
+      "reason": "cross-lane routing is high outside boundary",
+      "evidence_metrics": {
+        "offdiag_outside_boundary": 0.5117765665054321,
+        "boundary": 0.2562498152256012
+      },
+      "risk": "medium",
+      "delta_scale": 0.03,
+      "deploy": false
+    },
+    {
+      "source": "route_boundary_rule",
+      "target_type": "route",
+      "location": {
+        "t": 6
+      },
+      "action": "decrease",
+      "target": "offdiag_outside_boundary",
+      "reason": "cross-lane routing is high outside boundary",
+      "evidence_metrics": {
+        "offdiag_outside_boundary": 0.5058209896087646,
+        "boundary": 0.25612643361091614
+      },
+      "risk": "medium",
+      "delta_scale": 0.03,
+      "deploy": false
+    },
+    {
+      "source": "route_boundary_rule",
+      "target_type": "route",
+      "location": {
+        "t": 7
+      },
+      "action": "decrease",
+      "target": "offdiag_outside_boundary",
+      "reason": "cross-lane routing is high outside boundary",
+      "evidence_metrics": {
+        "offdiag_outside_boundary": 0.4994928538799286,
+        "boundary": 0.25600549578666687
+      },
+      "risk": "medium",
+      "delta_scale": 0.03,
+      "deploy": false
+    }
+  ],
+  "diversity": {
+    "by_source": {
+      "route_boundary_rule": 8
+    },
+    "by_target_type": {
+      "route": 8
+    },
+    "by_step": {
+      "0": 1,
+      "1": 1,
+      "2": 1,
+      "3": 1,
+      "4": 1,
+      "5": 1,
+      "6": 1,
+      "7": 1
+    },
+    "by_lane": {},
+    "duplicate_rate": 0.0,
+    "max_candidates_effective": 8
+  }
+}

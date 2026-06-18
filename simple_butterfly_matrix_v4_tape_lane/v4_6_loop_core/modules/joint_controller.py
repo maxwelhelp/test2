@@ -1,0 +1,195 @@
+#!/usr/bin/env python3
+"""Joint controller for v4.6.1 loop core."""
+from __future__ import annotations
+
+import math
+from dataclasses import dataclass
+from typing import Dict, Optional, Union
+
+import torch
+import torch.nn as nn
+
+
+@dataclass
+class ControllerOutput:
+    z: torch.Tensor
+    boundary_logit: torch.Tensor
+    route_logits: torch.Tensor
+    write_logits: torch.Tensor
+    fanout_logits: torch.Tensor
+    primitive_scores: torch.Tensor
+    primitive_sign_logits: torch.Tensor
+    compose_logits: torch.Tensor
+    memory_write_logits: torch.Tensor
+    memory_read_gate_logits: torch.Tensor
+    stats: Dict[str, torch.Tensor]
+
+
+def build_route_prior(lanes: int, *, device=None, dtype=None) -> torch.Tensor:
+    """Optional diagnostic weak prior. Default runtime strength is zero."""
+    prior = torch.zeros((lanes, lanes), device=device, dtype=dtype or torch.float32)
+    if lanes >= 2:
+        prior[0, 1] = 0.10
+    if lanes >= 3:
+        prior[1, 2] = 0.10
+    if lanes >= 4:
+        prior[1, 3] = 0.05
+        prior[3, 1] = 0.10
+    return prior
+
+
+class JointController(nn.Module):
+    """One shared latent produces coupled decisions.
+
+    Input/state statistics and previous choice embedding are context for
+    navigation, not external feedback. All outputs still participate in normal
+    forward/backward credit.
+    """
+
+    def __init__(
+        self,
+        dim: int,
+        lanes: int = 4,
+        num_primitives: int = 18,
+        compose_modes: int = 4,
+        max_steps: int = 32,
+        hidden_mult: int = 2,
+        dropout: float = 0.0,
+        route_prior_strength: float = 0.0,
+        context_stats_dim: int = 8,
+    ) -> None:
+        super().__init__()
+        self.dim = int(dim)
+        self.lanes = int(lanes)
+        self.num_primitives = int(num_primitives)
+        self.compose_modes = int(compose_modes)
+        self.max_steps = int(max_steps)
+        self.route_prior_strength = float(route_prior_strength)
+        self.context_stats_dim = int(context_stats_dim)
+
+        hidden = max(self.dim, int(hidden_mult) * self.dim)
+        self.lane_embedding = nn.Parameter(torch.randn(self.lanes, self.dim) * 0.02)
+        self.step_embedding = nn.Embedding(self.max_steps, self.dim)
+        self.memory_read_proj = nn.Linear(self.dim, self.dim, bias=False)
+        self.evidence_proj = nn.Linear(self.dim, self.dim, bias=False)
+        self.context_stats_proj = nn.Sequential(nn.LayerNorm(self.context_stats_dim), nn.Linear(self.context_stats_dim, self.dim, bias=False))
+        self.prev_choice_proj = nn.Linear(self.dim, self.dim, bias=False)
+
+        self.trunk = nn.Sequential(
+            nn.LayerNorm(self.dim),
+            nn.Linear(self.dim, hidden),
+            nn.SiLU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden, self.dim),
+            nn.LayerNorm(self.dim),
+        )
+
+        self.boundary_head = nn.Sequential(nn.LayerNorm(self.dim), nn.Linear(self.dim, 1))
+        self.route_q = nn.Linear(self.dim, self.dim, bias=False)
+        self.route_k = nn.Linear(self.dim, self.dim, bias=False)
+        self.route_pair_bias = nn.Linear(self.dim, self.lanes, bias=True)
+        self.write_head = nn.Linear(self.dim, 1)
+        self.fanout_head = nn.Linear(self.dim, 1)
+        self.primitive_score_head = nn.Linear(self.dim, self.num_primitives)
+        self.primitive_sign_head = nn.Linear(self.dim, self.num_primitives)
+        self.compose_head = nn.Linear(self.dim, self.compose_modes)
+        self.memory_write_head = nn.Linear(self.dim, 1)
+        self.memory_read_gate_head = nn.Sequential(nn.LayerNorm(self.dim), nn.Linear(self.dim, 1))
+
+        self.register_buffer("route_prior", build_route_prior(self.lanes), persistent=False)
+        self.reset_parameters()
+
+    def reset_parameters(self) -> None:
+        nn.init.normal_(self.step_embedding.weight, std=0.02)
+        # No fixed operational bias. Start nearly neutral with tiny random offsets
+        # so the input/context can decide instead of hard-coded write/fanout/memory behavior.
+        for head in (self.write_head, self.fanout_head, self.memory_write_head):
+            if head.bias is not None:
+                nn.init.normal_(head.bias, mean=0.0, std=0.03)
+        last = self.boundary_head[-1]
+        if isinstance(last, nn.Linear) and last.bias is not None:
+            nn.init.normal_(last.bias, mean=0.0, std=0.03)
+
+    def _step_ids(self, step_index: Union[int, torch.Tensor], batch: int, device: torch.device) -> torch.Tensor:
+        if isinstance(step_index, int):
+            return torch.full((batch,), int(step_index) % self.max_steps, device=device, dtype=torch.long)
+        idx = step_index.to(device=device, dtype=torch.long).view(-1)
+        if idx.numel() == 1:
+            idx = idx.expand(batch)
+        return idx.remainder(self.max_steps)
+
+    def forward(
+        self,
+        lane_state: torch.Tensor,
+        memory_read: torch.Tensor,
+        step_index: Union[int, torch.Tensor],
+        evidence: Optional[torch.Tensor] = None,
+        context_stats: Optional[torch.Tensor] = None,
+        previous_choice_context: Optional[torch.Tensor] = None,
+    ) -> ControllerOutput:
+        if lane_state.dim() != 3:
+            raise ValueError(f"lane_state must be [B,L,D], got {tuple(lane_state.shape)}")
+        bsz, lanes, dim = lane_state.shape
+        if lanes != self.lanes or dim != self.dim:
+            raise ValueError(f"expected [B,{self.lanes},{self.dim}], got {tuple(lane_state.shape)}")
+        if memory_read.dim() != 2 or memory_read.shape != (bsz, dim):
+            raise ValueError(f"memory_read must be [B,D], got {tuple(memory_read.shape)}")
+
+        step_ids = self._step_ids(step_index, bsz, lane_state.device)
+        step = self.step_embedding(step_ids).to(dtype=lane_state.dtype).view(bsz, 1, dim)
+        lane = self.lane_embedding.to(device=lane_state.device, dtype=lane_state.dtype).view(1, lanes, dim)
+        mem = self.memory_read_proj(memory_read).view(bsz, 1, dim)
+        ctx = lane_state + lane + step + mem
+        if evidence is not None:
+            if evidence.dim() != 2 or evidence.shape != (bsz, dim):
+                raise ValueError(f"evidence must be [B,D], got {tuple(evidence.shape)}")
+            ctx = ctx + self.evidence_proj(evidence).view(bsz, 1, dim)
+        if context_stats is not None:
+            if context_stats.shape[:2] != (bsz, lanes) or context_stats.shape[-1] != self.context_stats_dim:
+                raise ValueError(f"context_stats must be [B,L,{self.context_stats_dim}], got {tuple(context_stats.shape)}")
+            ctx = ctx + self.context_stats_proj(context_stats.to(dtype=lane_state.dtype))
+        if previous_choice_context is not None:
+            if previous_choice_context.shape != lane_state.shape:
+                raise ValueError("previous_choice_context must be [B,L,D]")
+            ctx = ctx + self.prev_choice_proj(previous_choice_context.to(dtype=lane_state.dtype))
+
+        z = self.trunk(ctx)
+        pooled = z.mean(dim=1)
+        boundary_logit = self.boundary_head(pooled).squeeze(-1)
+        q = self.route_q(z)
+        k = self.route_k(z)
+        route_logits = torch.einsum("bld,bmd->blm", q, k) / math.sqrt(max(1, dim))
+        route_logits = route_logits + self.route_pair_bias(z)
+        if self.route_prior_strength != 0.0:
+            route_logits = route_logits + self.route_prior.to(device=z.device, dtype=z.dtype).view(1, lanes, lanes) * self.route_prior_strength
+
+        write_logits = self.write_head(z).squeeze(-1)
+        fanout_logits = self.fanout_head(z).squeeze(-1)
+        primitive_scores = self.primitive_score_head(z)
+        primitive_sign_logits = self.primitive_sign_head(z)
+        compose_logits = self.compose_head(z)
+        memory_write_logits = self.memory_write_head(z).squeeze(-1)
+        memory_read_gate_logits = self.memory_read_gate_head(pooled).squeeze(-1)
+        stats = {
+            "controller_z_norm": z.float().norm(dim=-1).mean(),
+            "boundary_logit_mean": boundary_logit.float().mean(),
+            "route_logit_std": route_logits.float().std(unbiased=False),
+            "primitive_score_std": primitive_scores.float().std(unbiased=False),
+            "context_stats_norm": context_stats.float().norm(dim=-1).mean() if context_stats is not None else torch.zeros((), device=z.device),
+            "previous_choice_norm": previous_choice_context.float().norm(dim=-1).mean() if previous_choice_context is not None else torch.zeros((), device=z.device),
+        }
+        return ControllerOutput(z, boundary_logit, route_logits, write_logits, fanout_logits, primitive_scores, primitive_sign_logits, compose_logits, memory_write_logits, memory_read_gate_logits, stats)
+
+
+if __name__ == "__main__":
+    torch.manual_seed(0)
+    m = JointController(dim=16, lanes=4, num_primitives=18, max_steps=6)
+    x = torch.randn(3, 4, 16)
+    mem = torch.zeros(3, 16)
+    stats = torch.randn(3, 4, 8)
+    prev = torch.zeros(3, 4, 16)
+    out = m(x, mem, 2, evidence=torch.randn(3, 16), context_stats=stats, previous_choice_context=prev)
+    assert out.z.shape == (3, 4, 16)
+    assert out.route_logits.shape == (3, 4, 4)
+    assert out.primitive_scores.shape == (3, 4, 18)
+    print("joint_controller smoke ok")

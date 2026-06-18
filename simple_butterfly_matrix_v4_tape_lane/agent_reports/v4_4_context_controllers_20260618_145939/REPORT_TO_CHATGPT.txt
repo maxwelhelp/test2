@@ -1,0 +1,60 @@
+REPORT_TO_CHATGPT
+
+Версия: v4.3_min_heart
+Лучший val_acc: 47.50% @ epoch 7
+Текущий epoch/window: 7
+compare_to: v4.2_fixed_guided same seed/config or baseline_missing
+
+Главное по v4.3:
+- Это НЕ actor/critic/planner и НЕ auto-deploy.
+- Это costed paths + trace + deterministic candidate suggestions.
+- Последовательность должна возникать через разные tape positions, boundary peaks и изменение route/read/primitive по t.
+
+Route / boundary:
+- route_entropy_mean: 1.2759
+- boundary_mean: 0.9974
+- boundary_flatness/std: 0.0009
+- boundary_peak_count: 12 peaks=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+- offdiag_outside_boundary_cost: 0.0015
+- self_route_mass: 0.4207
+- useful_transition_mass: 0.1772
+- allowed/disallowed_route_mass: 0.5979/0.4021
+- boundary_soft_peak_count: 12.0000
+- collapse_flags: BOUNDARY_EXPLOIT
+
+Sequence:
+- active tape steps step_alive>=0.50: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+- sequence_nonflat_score: 0.0258
+
+Shortcuts / memory:
+- late_input_cost: 0.0559
+- detail_attention_mass: 0.2684
+- detail_topread_share(report-only): 0.9568
+- memory_write_mean: 0.5216
+- memory_consumer_proxy: 0.4223
+
+Candidate suggestions:
+- boundary increase boundary_peak_contrast at {'t': 'all'} | boundary is flat or has no hard peaks; program stages are not separated | deploy=False
+- boundary decrease boundary at {'t': 1} | boundary is high but boundary_usefulness is low | deploy=False
+- boundary decrease boundary at {'t': 4} | boundary is high but boundary_usefulness is low | deploy=False
+- boundary decrease boundary at {'t': 6} | boundary is high but boundary_usefulness is low | deploy=False
+- boundary decrease boundary at {'t': 7} | boundary is high but boundary_usefulness is low | deploy=False
+- boundary decrease boundary at {'t': 8} | boundary is high but boundary_usefulness is low | deploy=False
+- boundary decrease boundary at {'t': 9} | boundary is high but boundary_usefulness is low | deploy=False
+- boundary decrease boundary at {'t': 10} | boundary is high but boundary_usefulness is low | deploy=False
+
+Артефакты:
+- metrics.csv
+- analysis_epoch_XXX.json
+- trace_feedback_epoch_XXX.json
+- candidate_suggestions_epoch_XXX.json
+- final_report.json
+- train.log если запускался sync script
+
+Context-controller diagnostics:
+- context_controller_active: True scale=0.055
+- self_route_mass: 0.4207
+- useful_transition_mass: 0.1772
+- collapse_flags: BOUNDARY_EXPLOIT
+- read/route/boundary/alive/write now receive context projections from current lane state, evidence and memory.
+- fast eval computes loss/accuracy on all validation batches, but builds heavy trace/report once from last validation batch.

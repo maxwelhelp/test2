@@ -1,0 +1,5 @@
+[v4.4] bridge entrypoint -> patched run_v4_3_context_controller.sh CONTEXT_CONTROLLER_SCALE=0.055 PRIMITIVE_CONTROLLER_SCALE=0.055 TRANSITION_CONTROLLER_SCALE=0.055 FANOUT_CONTROLLER_SCALE=0.055 BOUNDARY_CONTROLLER_SCALE=0.055 BOUNDARY_MEAN_TARGET=0.28 BOUNDARY_ROUTE_GATE_SCALE=0.25 ALIVE_CONTROLLER_SCALE=0.0 alpha_min=0.01 alpha_max=0.1 fast_loader_override=disabled sequence_terms_compat=enabled primitive_controller=enabled transition_controller=enabled fanout_controller=enabled boundary_mean_budget=enabled
+  File "<stdin>", line 414
+    routes = base._tensor_from_list(rep.get("route_matrix", [])); read_group = base._tensor_from_list(rep.get("read_group_mass", []))
+                                                                                                                                     ^
+IndentationError: unindent does not match any outer indentation level

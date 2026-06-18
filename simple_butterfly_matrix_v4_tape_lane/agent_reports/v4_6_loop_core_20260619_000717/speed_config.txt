@@ -1,0 +1,10 @@
+batch_size=128
+eval_batch_size=256
+workers=4
+device=cuda
+amp=fp16
+dim=128
+steps=8
+primitive_rank=32
+synthetic_data=0
+allow_synthetic_fallback=0

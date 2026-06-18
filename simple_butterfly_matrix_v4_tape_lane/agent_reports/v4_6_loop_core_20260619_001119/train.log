@@ -1,0 +1,7 @@
+loaded datasets: train=12000 val=2000 classes=['yes', 'no', 'up', 'down', 'left', 'right', 'on', 'off', 'stop', 'go']
+V46LoopCore params=556715 steps=8 lanes=4 D=128 K=8 rank=32 device=cuda amp=fp16
+epoch 001/5 train=2.0700/21.91% val=1.6642/38.30% best=38.30%@1 tau=1.000
+epoch 002/5 train=1.5696/40.07% val=1.3587/46.35% best=46.35%@2 tau=0.920
+epoch 003/5 train=1.2809/52.66% val=1.0135/63.85% best=63.85%@3 tau=0.846
+epoch 004/5 train=1.0306/63.78% val=0.8127/71.70% best=71.70%@4 tau=0.779
+epoch 005/5 train=0.8139/72.62% val=0.6697/76.65% best=76.65%@5 tau=0.716

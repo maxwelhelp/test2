@@ -1,0 +1,14 @@
+[v4.4] bridge entrypoint -> patched run_v4_3_context_controller.sh CONTEXT_CONTROLLER_SCALE=0.055 alpha_min=0.01 alpha_max=0.1 fast_loader_override=disabled
+loaded datasets: train=12000 val=2000 classes=['yes', 'no', 'up', 'down', 'left', 'right', 'on', 'off', 'stop', 'go']
+TapeLaneRouter v4.3_min_heart params=1714011 T=12 lanes=4 cells=12 D=96 pairs=12 device=cuda amp=fp16
+Traceback (most recent call last):
+  File "<stdin>", line 312, in <module>
+  File "<stdin>", line 301, in run
+  File "/home/maxwelhelp/test/sience/experiments/math_search/WORKING_BEST/test2/simple_butterfly_matrix_v4_tape_lane/tape_lane_transport_v4_3_min_heart.py", line 1161, in run
+    tr = train_epoch(model, train_loader, opt, scaler, device, dtype, args, epoch)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<stdin>", line 284, in train_epoch
+  File "/home/maxwelhelp/test/sience/experiments/math_search/WORKING_BEST/test2/simple_butterfly_matrix_v4_tape_lane/tape_lane_transport_v4_3_min_heart.py", line 494, in aux_losses_v43
+    out["boundary_usefulness_cost"] = seq["boundary_usefulness_cost"]
+                                      ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyError: 'boundary_usefulness_cost'

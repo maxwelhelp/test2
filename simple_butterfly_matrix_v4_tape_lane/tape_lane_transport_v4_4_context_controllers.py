@@ -20,6 +20,10 @@ transform unit is the next code step after this bridge smoke passes.
 The old wrapper also contains a broken experimental fast-loader override that looks for
 SpeechCommandsBalanced in v4.2. This bridge disables only that one monkey-patch at runtime
 and keeps the rest of the controller wrapper intact.
+
+The wrapper also has an older sequence_terms() implementation. Current v4.3 aux_losses_v43
+expects boundary_usefulness_cost/proxy, so this bridge injects those keys into the temporary
+wrapper copy instead of editing the old wrapper in-place.
 """
 
 from __future__ import annotations
@@ -84,21 +88,62 @@ def _translate_args(argv: list[str]) -> tuple[list[str], dict[str, str]]:
     return out, env
 
 
-def _patched_wrapper_copy(wrapper: Path) -> Path:
-    """Create a temporary wrapper with the broken fast-loader monkey-patch disabled.
-
-    We only remove this line:
-        base.v42.make_loaders = make_loaders_fast
-
-    Keeping base v4.3/v4.2 make_loaders avoids the SpeechCommandsBalanced AttributeError,
-    while preserving context-controller backbone/eval/train/report monkey-patches.
-    """
-    text = wrapper.read_text(encoding="utf-8")
-    bad = "base.v42.make_loaders = make_loaders_fast"
-    if bad in text:
-        text = text.replace(bad, "# disabled by v4.4 bridge: " + bad)
+def _patch_wrapper_text(text: str) -> str:
+    """Patch the legacy shell-embedded Python wrapper for v4.4 bridge smoke."""
+    # 1) Disable broken data-loader monkey-patch only.
+    bad_loader = "base.v42.make_loaders = make_loaders_fast"
+    if bad_loader in text:
+        text = text.replace(bad_loader, "# disabled by v4.4 bridge: " + bad_loader)
     else:
         print("[v4.4] warning: fast-loader monkey-patch line not found; wrapper unchanged", file=sys.stderr)
+
+    # 2) Current aux_losses_v43 expects these keys from base.sequence_terms.
+    old_return = (
+        '    return {"sequence_route_delta_mean": route_delta, "sequence_primitive_delta_mean": prim_delta, '
+        '"sequence_update_delta_mean": trace_delta, "sequence_trace_delta_mean": trace_delta, '
+        '"sequence_read_delta_mean": read_delta, "sequence_nonflat_score": route_delta + prim_delta + trace_delta + read_delta, '
+        '"self_route_mass": route_extra["self_route_mass"].to(device), "useful_transition_mass": route_extra["useful_transition_mass"].to(device)}'
+    )
+    new_return = (
+        '    if getattr(baux, "boundaries", torch.empty(0, device=device)).numel():\n'
+        '        boundary = baux.boundaries.float().to(device)\n'
+        '        routes_f = routes.to(device)\n'
+        '        prim_f = prim.to(device)\n'
+        '        read_f = read.to(device)\n'
+        '        route_step = (routes_f[1:] - routes_f[:-1]).abs().mean(dim=(-2, -1)) if routes_f.numel() and routes_f.shape[0] > 1 else torch.empty(0, device=device)\n'
+        '        prim_step = (prim_f[1:] - prim_f[:-1]).abs().mean(dim=(-2, -1)) if prim_f.numel() and prim_f.shape[0] > 1 else torch.empty(0, device=device)\n'
+        '        read_step = (read_f[1:] - read_f[:-1]).abs().mean(dim=(-2, -1)) if read_f.numel() and read_f.shape[0] > 1 else torch.empty(0, device=device)\n'
+        '        if upd.numel() and upd.shape[1] > 1:\n'
+        '            upd_by_t = upd.mean(dim=(0, 3)).to(device)\n'
+        '            upd_step = (upd_by_t[1:] - upd_by_t[:-1]).abs().mean(dim=-1)\n'
+        '        else:\n'
+        '            upd_step = torch.empty(0, device=device)\n'
+        '        common = min(int(boundary.shape[0]), int(route_step.shape[0]), int(prim_step.shape[0]), int(read_step.shape[0]), int(upd_step.shape[0]))\n'
+        '        if common:\n'
+        '            seq_by_step = route_step[:common] + prim_step[:common] + read_step[:common] + upd_step[:common]\n'
+        '            denom = seq_by_step.detach().mean().clamp_min(1e-6)\n'
+        '            boundary_usefulness = (boundary[:common] * ((seq_by_step / denom) - 1.0)).mean()\n'
+        '        else:\n'
+        '            boundary_usefulness = torch.zeros((), device=device)\n'
+        '    else:\n'
+        '        boundary_usefulness = torch.zeros((), device=device)\n'
+        '    return {"sequence_route_delta_mean": route_delta, "sequence_primitive_delta_mean": prim_delta, '
+        '"sequence_update_delta_mean": trace_delta, "sequence_trace_delta_mean": trace_delta, '
+        '"sequence_read_delta_mean": read_delta, "sequence_nonflat_score": route_delta + prim_delta + trace_delta + read_delta, '
+        '"self_route_mass": route_extra["self_route_mass"].to(device), "useful_transition_mass": route_extra["useful_transition_mass"].to(device), '
+        '"boundary_usefulness_cost": F.relu(float(args.boundary_usefulness_target) - boundary_usefulness).pow(2), '
+        '"boundary_usefulness_proxy": boundary_usefulness.detach()}'
+    )
+    if old_return in text:
+        text = text.replace(old_return, new_return)
+    elif "boundary_usefulness_cost" not in text:
+        print("[v4.4] warning: sequence_terms return pattern not found; boundary usefulness keys may still be missing", file=sys.stderr)
+    return text
+
+
+def _patched_wrapper_copy(wrapper: Path) -> Path:
+    text = wrapper.read_text(encoding="utf-8")
+    text = _patch_wrapper_text(text)
     tmp = tempfile.NamedTemporaryFile("w", encoding="utf-8", prefix="v44_context_wrapper_", suffix=".sh", delete=False)
     with tmp:
         tmp.write(text)
@@ -123,7 +168,7 @@ def main(argv: list[str] | None = None) -> int:
         "[v4.4] bridge entrypoint -> patched run_v4_3_context_controller.sh "
         f"CONTEXT_CONTROLLER_SCALE={env.get('CONTEXT_CONTROLLER_SCALE')} "
         f"alpha_min={env.get('V44_CONTEXT_ALPHA_MIN')} alpha_max={env.get('V44_CONTEXT_ALPHA_MAX')} "
-        "fast_loader_override=disabled",
+        "fast_loader_override=disabled sequence_terms_compat=enabled",
         flush=True,
     )
     cmd = ["bash", str(patched_wrapper), *forwarded]

@@ -27,6 +27,7 @@ echo "[v4.3 sync] validate"
 bash simple_butterfly_matrix_v4_tape_lane/commands/validate_v4_3_min_heart.sh
 
 echo "[v4.3 sync] run -> $REPORT_DIR"
+set +e
 python simple_butterfly_matrix_v4_tape_lane/tape_lane_transport_v4_3_min_heart.py \
   --data-root "$DATA_ROOT" \
   --epochs "$EPOCHS" \
@@ -73,6 +74,10 @@ python simple_butterfly_matrix_v4_tape_lane/tape_lane_transport_v4_3_min_heart.p
   --log-every "$LOG_EVERY" \
   --no-save-checkpoints \
   --out-dir "$REPORT_DIR" 2>&1 | tee "$REPORT_DIR/train.log"
+RUN_STATUS=${PIPESTATUS[0]}
+set -e
+
+echo "[v4.3 sync] run_status=$RUN_STATUS" | tee "$REPORT_DIR/run_status.txt"
 
 STATUS="simple_butterfly_matrix_v4_tape_lane/AGENT_STATUS.md"
 cat > "$STATUS" <<EOF_STATUS
@@ -82,6 +87,7 @@ Last run: v4.3_min_heart
 Timestamp: $TS
 Report dir: $REPORT_DIR
 Command: sync_run_5ep_v4_3_min_heart_push_logs.sh
+Run status: $RUN_STATUS
 
 Expected artifacts:
 - metrics.csv
@@ -91,9 +97,41 @@ Expected artifacts:
 - REPORT_TO_CHATGPT.txt
 - final_report.json
 - train.log
+- run_status.txt
 
 No checkpoints should be committed.
 EOF_STATUS
+
+if [ -f "$REPORT_DIR/final_report.json" ]; then
+  python - "$REPORT_DIR/final_report.json" "$STATUS" <<'PY'
+import json, sys
+src, dst = sys.argv[1], sys.argv[2]
+try:
+    data = json.load(open(src, 'r', encoding='utf-8'))
+    tr = data.get('last_trace_feedback') or {}
+    route = tr.get('route') or {}
+    head = tr.get('head') or {}
+    flags = []
+    bm = float(route.get('boundary_mean', 0.0) or 0.0)
+    bf = float(route.get('boundary_flatness', 0.0) or 0.0)
+    ent = float(route.get('entropy_mean', 0.0) or 0.0)
+    detail = float(head.get('detail_attention_mass', 0.0) or 0.0)
+    if bm > 0.90 and bf < 0.05: flags.append('BOUNDARY_EXPLOIT')
+    if bm < 0.05: flags.append('BOUNDARY_DEAD')
+    if ent > 1.30: flags.append('ROUTE_UNIFORM')
+    if detail > 0.55: flags.append('DETAIL_SHORTCUT')
+    with open(dst, 'a', encoding='utf-8') as f:
+        f.write('\nSummary:\n')
+        f.write(f"- best_acc: {float(data.get('best_acc', 0.0))*100:.2f}% @ epoch {data.get('best_epoch', 0)}\n")
+        f.write(f"- boundary_mean: {bm:.4f}\n")
+        f.write(f"- route_entropy: {ent:.4f}\n")
+        f.write(f"- detail_attention_mass: {detail:.4f}\n")
+        f.write(f"- collapse_flags: {','.join(flags) if flags else 'NONE'}\n")
+except Exception as e:
+    with open(dst, 'a', encoding='utf-8') as f:
+        f.write(f'\nSummary parse failed: {e}\n')
+PY
+fi
 
 echo "[v4.3 sync] git add logs only"
 find "$REPORT_DIR" -maxdepth 1 \( -name '*.json' -o -name '*.csv' -o -name '*.txt' -o -name '*.log' \) -print -exec git add {} +
@@ -112,4 +150,5 @@ else
   git push
 fi
 
-echo "[v4.3 sync] done: $REPORT_DIR"
+echo "[v4.3 sync] done: $REPORT_DIR status=$RUN_STATUS"
+exit "$RUN_STATUS"

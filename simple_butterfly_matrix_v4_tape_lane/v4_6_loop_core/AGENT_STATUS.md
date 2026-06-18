@@ -3,9 +3,10 @@
 Current stage: v4.6.1 grouped real-data loop core
 Entrypoint: simple_butterfly_matrix_v4_tape_lane/v4_6_loop_core/tape_lane_transport_v4_6_1_grouped_core.py
 Smoke status: pass
-Timestamp: 20260619_012801
-Report dir: simple_butterfly_matrix_v4_tape_lane/agent_reports/v4_6_1_grouped_real_20260619_012801
+Timestamp: 20260619_013939
+Report dir: simple_butterfly_matrix_v4_tape_lane/agent_reports/v4_6_1_grouped_real_20260619_013939
 Run status: 0
+Latest compact report: simple_butterfly_matrix_v4_tape_lane/v4_6_loop_core/LATEST_RUN_REPORT.md
 
 Evidence rules:
 - synthetic data disabled in sync evidence run
@@ -16,12 +17,11 @@ Closed-loop invariant:
 - The controller decision affects execution, execution affects loss, loss gradient updates the controller decision path.
 
 Known remaining issues:
-- inspect grouped/context/credit reports in simple_butterfly_matrix_v4_tape_lane/agent_reports/v4_6_1_grouped_real_20260619_012801
+- inspect grouped/context/credit reports in simple_butterfly_matrix_v4_tape_lane/agent_reports/v4_6_1_grouped_real_20260619_013939
 
 Summary:
-- best_acc: 74.15% @ epoch 5
-- boundary_mean/peaks: 0.2679/3
-- route_entropy/self/useful: 0.4182/0.2512/0.4402
-- primitive_entropy/top1/neg_sign: 1.8621/0.3438/0.4898
-- memory_write/read/influence: 6.8362/4.6237/2.5545
-- collapse_flags: NONE
+- best_acc: 72.20%
+- latest_report: simple_butterfly_matrix_v4_tape_lane/v4_6_loop_core/LATEST_RUN_REPORT.md
+- run_summary: simple_butterfly_matrix_v4_tape_lane/agent_reports/v4_6_1_grouped_real_20260619_013939/RUN_SUMMARY.md
+- useful_groups: [('channel', 0.3344442844390869), ('memory', 0.027743637561798096), ('correction', 0.023800909519195557)]
+- suspicious_groups: [('aggregation', -0.00630033016204834), ('composition', -0.006207168102264404), ('keep', 0.013298451900482178)]

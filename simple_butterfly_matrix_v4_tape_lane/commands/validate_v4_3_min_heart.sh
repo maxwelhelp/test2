@@ -15,7 +15,7 @@ python "$FILE" --help >/tmp/v4_3_min_heart_help.txt
 
 echo "[validate v4.3] required implementation markers"
 grep -q "route_offdiag_outside_boundary_cost" "$FILE"
-grep -q "offdiag_mass_norm" "$FILE"
+grep -q "offdiag_norm" "$FILE"
 grep -q "boundary_budget_cost" "$FILE"
 grep -q "detail_attention_mass" "$FILE"
 grep -q "detail_head_shortcut_cost" "$FILE"

@@ -7,13 +7,15 @@ context-controller wrapper, but patches it at runtime so v4.3 remains stable.
 No Actor/Critic, no EditorLoop deploy, no MatrixMemory, no FeedbackBias auto-deploy.
 
 Current bridge coverage:
-    read/source controller      yes
-    route/lane-flow controller  yes
-    boundary controller         yes, but budget-normalized
-    boundary route cheapness    capped/budgeted gate
-    write gate controller       yes
-    alive controller            present, disabled by default
-    primitive controller        yes, patched around each transform unit
+    read/source controller       yes
+    primitive controller         yes
+    route/lane-flow controller   yes
+    transition type controller   yes
+    fanout controller            yes
+    boundary controller          yes, budget-normalized
+    boundary route cheapness     capped/budgeted gate
+    write gate controller        yes
+    alive controller             present, disabled by default
 """
 
 from __future__ import annotations
@@ -56,6 +58,8 @@ def _translate_args(argv: list[str]) -> tuple[list[str], dict[str, str]]:
 
     env["CONTEXT_CONTROLLER_SCALE"] = env.get("CONTEXT_CONTROLLER_SCALE", f"{scale:.6g}")
     env["PRIMITIVE_CONTROLLER_SCALE"] = env.get("PRIMITIVE_CONTROLLER_SCALE", env["CONTEXT_CONTROLLER_SCALE"])
+    env["TRANSITION_CONTROLLER_SCALE"] = env.get("TRANSITION_CONTROLLER_SCALE", env["CONTEXT_CONTROLLER_SCALE"])
+    env["FANOUT_CONTROLLER_SCALE"] = env.get("FANOUT_CONTROLLER_SCALE", env["CONTEXT_CONTROLLER_SCALE"])
     env["BOUNDARY_CONTROLLER_SCALE"] = env.get("BOUNDARY_CONTROLLER_SCALE", env["CONTEXT_CONTROLLER_SCALE"])
     # Mean boundary mass budget. 0.28 ≈ 3-4 effective peaks over T=12, but without a two-pass top-k planner.
     env["BOUNDARY_MEAN_TARGET"] = env.get("BOUNDARY_MEAN_TARGET", "0.28")
@@ -187,6 +191,8 @@ def _patch_wrapper_text(text: str) -> str:
     init_repl = (
         '        self.context_controller_scale = float(os.environ.get("CONTEXT_CONTROLLER_SCALE", "0.15"))\n'
         '        self.primitive_controller_scale = float(os.environ.get("PRIMITIVE_CONTROLLER_SCALE", str(self.context_controller_scale)))\n'
+        '        self.transition_controller_scale = float(os.environ.get("TRANSITION_CONTROLLER_SCALE", str(self.context_controller_scale)))\n'
+        '        self.fanout_controller_scale = float(os.environ.get("FANOUT_CONTROLLER_SCALE", str(self.context_controller_scale)))\n'
         '        self.boundary_controller_scale = float(os.environ.get("BOUNDARY_CONTROLLER_SCALE", str(self.context_controller_scale)))\n'
         '        self.boundary_mean_target = float(os.environ.get("BOUNDARY_MEAN_TARGET", "0.28"))\n'
         '        self.boundary_route_gate_scale = float(os.environ.get("BOUNDARY_ROUTE_GATE_SCALE", "0.25"))\n'
@@ -196,13 +202,40 @@ def _patch_wrapper_text(text: str) -> str:
     if init_block in text:
         text = text.replace(init_block, init_repl, 1)
 
+    nets_marker = '        self.write_context_net = nn.Sequential(nn.LayerNorm(4 * d), nn.Linear(4 * d, d), nn.SiLU(), nn.Linear(d, 1))'
+    nets_repl = (
+        '        self.write_context_net = nn.Sequential(nn.LayerNorm(4 * d), nn.Linear(4 * d, d), nn.SiLU(), nn.Linear(d, 1))\n'
+        '        self.transition_type_net = nn.Sequential(nn.LayerNorm(4 * d), nn.Linear(4 * d, d), nn.SiLU(), nn.Linear(d, 8))\n'
+        '        self.fanout_context_net = nn.Sequential(nn.LayerNorm(4 * d), nn.Linear(4 * d, d), nn.SiLU(), nn.Linear(d, 4))\n'
+        '        basis = torch.zeros(8, l, l)\n'
+        '        basis[0] = torch.eye(l) * 1.25\n'
+        '        if l >= 2: basis[1, 0, 1] = 1.75\n'
+        '        if l >= 3: basis[2, 1, 2] = 1.75\n'
+        '        if l >= 4: basis[3, 1, 3] = 1.50\n'
+        '        if l >= 4: basis[4, 3, 1] = 1.50\n'
+        '        if l >= 2: basis[5, 0, 1] = 1.15\n'
+        '        if l >= 4: basis[5, 0, 3] = 1.15\n'
+        '        if l >= 3: basis[6, 0, 2] = 1.00; basis[6, 1, 2] = 1.00\n'
+        '        if l >= 3: basis[7, :, 2] += 0.55\n'
+        '        if l >= 4: basis[7, :, 3] += 0.35\n'
+        '        self.register_buffer("transition_route_basis", basis, persistent=False)'
+    )
+    if nets_marker in text and "transition_type_net" not in text:
+        text = text.replace(nets_marker, nets_repl, 1)
+
     zero_block = (
         '        for net in [self.read_context_net, self.route_context_net, self.boundary_context_net, self.alive_context_net, self.write_context_net]:\n'
         '            last = net[-1]\n'
         '            nn.init.zeros_(last.weight)\n'
         '            nn.init.zeros_(last.bias)'
     )
-    zero_repl = zero_block + '\n        self.units = nn.ModuleList([ContextPrimitiveTransformUnit(u, self.primitive_controller_scale) for u in self.units])'
+    zero_repl = (
+        '        for net in [self.read_context_net, self.route_context_net, self.boundary_context_net, self.alive_context_net, self.write_context_net, self.transition_type_net, self.fanout_context_net]:\n'
+        '            last = net[-1]\n'
+        '            nn.init.zeros_(last.weight)\n'
+        '            nn.init.zeros_(last.bias)\n'
+        '        self.units = nn.ModuleList([ContextPrimitiveTransformUnit(u, self.primitive_controller_scale) for u in self.units])'
+    )
     if zero_block in text and "ContextPrimitiveTransformUnit(u, self.primitive_controller_scale)" not in text:
         text = text.replace(zero_block, zero_repl, 1)
 
@@ -214,7 +247,6 @@ def _patch_wrapper_text(text: str) -> str:
     old_boundary = 'boundary = torch.sigmoid(self.boundary_logit[t].to(device=x.device, dtype=x.dtype) + self.context_controller_scale * boundary_bias)  # [B]'
     new_boundary = (
         'boundary_raw = torch.sigmoid(self.boundary_logit[t].to(device=x.device, dtype=x.dtype) + self.boundary_controller_scale * boundary_bias)  # [B]\n'
-        '            # Budget normalization: prevents boundary_mean≈1.0 everywhere while keeping gradients and relative scores.\n'
         '            boundary_budget = torch.as_tensor(self.boundary_mean_target, device=x.device, dtype=boundary_raw.dtype)\n'
         '            boundary = (boundary_raw * boundary_budget / boundary_raw.detach().mean().clamp_min(1e-4)).clamp(0.0, 1.0)  # [B]'
     )
@@ -224,10 +256,23 @@ def _patch_wrapper_text(text: str) -> str:
     old_route_gate = 'route_logits = route_logits + boundary.view(-1, 1, 1) * self.boundary_route_bias.to(device=x.device, dtype=x.dtype).view(1, self.lanes, self.lanes)'
     new_route_gate = (
         'route_boundary_gate = (boundary * self.boundary_route_gate_scale).clamp(0.0, 1.0)\n'
-        '            route_logits = route_logits + route_boundary_gate.view(-1, 1, 1) * self.boundary_route_bias.to(device=x.device, dtype=x.dtype).view(1, self.lanes, self.lanes)'
+        '            route_logits = route_logits + route_boundary_gate.view(-1, 1, 1) * self.boundary_route_bias.to(device=x.device, dtype=x.dtype).view(1, self.lanes, self.lanes)\n'
+        '            transition_type_logits = self.transition_type_net(gctx).float()\n'
+        '            transition_type_w = torch.softmax(transition_type_logits, dim=-1).to(dtype=x.dtype)\n'
+        '            transition_bias = torch.einsum("bk,kft->bft", transition_type_w, self.transition_route_basis.to(device=x.device, dtype=x.dtype))\n'
+        '            route_logits = route_logits + self.transition_controller_scale * route_boundary_gate.view(-1, 1, 1) * transition_bias\n'
+        '            fanout_logits = self.fanout_context_net(gctx).float()\n'
+        '            fanout_w = torch.softmax(fanout_logits, dim=-1).to(dtype=x.dtype)\n'
+        '            fanout_temps = torch.tensor([0.55, 0.75, 0.95, 1.35], device=x.device, dtype=x.dtype)\n'
+        '            route_temperature = (fanout_w * fanout_temps.view(1, -1)).sum(dim=-1).clamp(0.45, 1.50).view(-1, 1, 1)'
     )
     if old_route_gate in text:
         text = text.replace(old_route_gate, new_route_gate, 1)
+
+    old_route_softmax = 'route = torch.softmax((route_logits + self.context_controller_scale * route_ctx).float(), dim=-1).to(x.dtype)  # [B,from,to]'
+    new_route_softmax = 'route = torch.softmax(((route_logits + self.context_controller_scale * route_ctx) / route_temperature).float(), dim=-1).to(x.dtype)  # [B,from,to]'
+    if old_route_softmax in text:
+        text = text.replace(old_route_softmax, new_route_softmax, 1)
 
     old_unit_call = '            update, unit_info = unit(x, read_packet, self.lane_embed)'
     new_unit_call = (
@@ -246,13 +291,21 @@ def _patch_wrapper_text(text: str) -> str:
     if old_unit_call in text:
         text = text.replace(old_unit_call, new_unit_call, 1)
 
+    route_list_append = '            primitive_list.append(unit_info["primitive_weights"].to(device=x.device))'
+    route_list_repl = (
+        '            primitive_list.append(unit_info["primitive_weights"].to(device=x.device))\n'
+        '            # transition/fanout are runtime controllers; detailed per-step logs are kept lightweight in v4.4 bridge.'
+    )
+    if route_list_append in text:
+        text = text.replace(route_list_append, route_list_repl, 1)
+
     old_trace_ctx = 'trace["collapse_flags"] = flags; trace["version"] = "v4.3_context_controller_audit_fast"; trace["context_controller"] = {"active": True, "scale": float(os.environ.get("CONTEXT_CONTROLLER_SCALE", "0.15"))}'
-    new_trace_ctx = 'trace["collapse_flags"] = flags; trace["version"] = "v4.4_context_controller_primitive_boundary_mean_budget_bridge"; trace["context_controller"] = {"active": True, "scale": float(os.environ.get("CONTEXT_CONTROLLER_SCALE", "0.15")), "primitive_controller": True, "primitive_scale": float(os.environ.get("PRIMITIVE_CONTROLLER_SCALE", os.environ.get("CONTEXT_CONTROLLER_SCALE", "0.15"))), "boundary_controller_scale": float(os.environ.get("BOUNDARY_CONTROLLER_SCALE", os.environ.get("CONTEXT_CONTROLLER_SCALE", "0.15"))), "boundary_mean_target": float(os.environ.get("BOUNDARY_MEAN_TARGET", "0.28")), "boundary_route_gate_scale": float(os.environ.get("BOUNDARY_ROUTE_GATE_SCALE", "0.25")), "alive_scale": float(os.environ.get("ALIVE_CONTROLLER_SCALE", "0.0"))}'
+    new_trace_ctx = 'trace["collapse_flags"] = flags; trace["version"] = "v4.4_transition_fanout_bridge"; trace["context_controller"] = {"active": True, "scale": float(os.environ.get("CONTEXT_CONTROLLER_SCALE", "0.15")), "primitive_controller": True, "transition_controller": True, "transition_scale": float(os.environ.get("TRANSITION_CONTROLLER_SCALE", os.environ.get("CONTEXT_CONTROLLER_SCALE", "0.15"))), "fanout_controller": True, "fanout_scale": float(os.environ.get("FANOUT_CONTROLLER_SCALE", os.environ.get("CONTEXT_CONTROLLER_SCALE", "0.15"))), "primitive_scale": float(os.environ.get("PRIMITIVE_CONTROLLER_SCALE", os.environ.get("CONTEXT_CONTROLLER_SCALE", "0.15"))), "boundary_mean_target": float(os.environ.get("BOUNDARY_MEAN_TARGET", "0.28")), "boundary_route_gate_scale": float(os.environ.get("BOUNDARY_ROUTE_GATE_SCALE", "0.25")), "alive_scale": float(os.environ.get("ALIVE_CONTROLLER_SCALE", "0.0"))}'
     if old_trace_ctx in text:
         text = text.replace(old_trace_ctx, new_trace_ctx, 1)
 
     old_report_line = 'f.write("- read/route/boundary/alive/write now receive context projections from current lane state, evidence and memory.\\n"); f.write("- fast eval computes loss/accuracy on all validation batches, but builds heavy trace/report once from last validation batch.\\n")'
-    new_report_line = 'f.write("- read/route/boundary/write receive context projections from current lane state, evidence and memory.\\n"); f.write("- primitive_controller is active inside transform units and biases primitive/operator choice from lane/read/memory/step/route context.\\n"); f.write(f"- boundary_mean_target: {float(os.environ.get(\'BOUNDARY_MEAN_TARGET\', \'0.28\')):.3f}; boundary route_gate_scale={float(os.environ.get(\'BOUNDARY_ROUTE_GATE_SCALE\', \'0.25\')):.3f}.\\n"); f.write(f"- alive_controller_scale: {float(os.environ.get(\'ALIVE_CONTROLLER_SCALE\', \'0.0\')):.3f} (0.0 means disabled by default).\\n"); f.write("- fast eval computes loss/accuracy on all validation batches, but builds heavy trace/report once from last validation batch.\\n")'
+    new_report_line = 'f.write("- read/route/boundary/write receive context projections from current lane state, evidence and memory.\\n"); f.write("- primitive_controller is active inside transform units and biases primitive/operator choice from lane/read/memory/step/route context.\\n"); f.write("- transition_type_controller adds route-basis programs: identity, detail->state, state->abstract, state->memory, memory->state, fork, join, head_prepare.\\n"); f.write("- fanout_controller controls route temperature for soft 1/2/3/all-output behavior.\\n"); f.write(f"- boundary_mean_target: {float(os.environ.get(\'BOUNDARY_MEAN_TARGET\', \'0.28\')):.3f}; boundary route_gate_scale={float(os.environ.get(\'BOUNDARY_ROUTE_GATE_SCALE\', \'0.25\')):.3f}.\\n"); f.write(f"- alive_controller_scale: {float(os.environ.get(\'ALIVE_CONTROLLER_SCALE\', \'0.0\')):.3f} (0.0 means disabled by default).\\n"); f.write("- fast eval computes loss/accuracy on all validation batches, but builds heavy trace/report once from last validation batch.\\n")'
     if old_report_line in text:
         text = text.replace(old_report_line, new_report_line, 1)
 
@@ -286,12 +339,14 @@ def main(argv: list[str] | None = None) -> int:
         "[v4.4] bridge entrypoint -> patched run_v4_3_context_controller.sh "
         f"CONTEXT_CONTROLLER_SCALE={env.get('CONTEXT_CONTROLLER_SCALE')} "
         f"PRIMITIVE_CONTROLLER_SCALE={env.get('PRIMITIVE_CONTROLLER_SCALE')} "
+        f"TRANSITION_CONTROLLER_SCALE={env.get('TRANSITION_CONTROLLER_SCALE')} "
+        f"FANOUT_CONTROLLER_SCALE={env.get('FANOUT_CONTROLLER_SCALE')} "
         f"BOUNDARY_CONTROLLER_SCALE={env.get('BOUNDARY_CONTROLLER_SCALE')} "
         f"BOUNDARY_MEAN_TARGET={env.get('BOUNDARY_MEAN_TARGET')} "
         f"BOUNDARY_ROUTE_GATE_SCALE={env.get('BOUNDARY_ROUTE_GATE_SCALE')} "
         f"ALIVE_CONTROLLER_SCALE={env.get('ALIVE_CONTROLLER_SCALE')} "
         f"alpha_min={env.get('V44_CONTEXT_ALPHA_MIN')} alpha_max={env.get('V44_CONTEXT_ALPHA_MAX')} "
-        "fast_loader_override=disabled sequence_terms_compat=enabled primitive_controller=enabled boundary_mean_budget=enabled",
+        "fast_loader_override=disabled sequence_terms_compat=enabled primitive_controller=enabled transition_controller=enabled fanout_controller=enabled boundary_mean_budget=enabled",
         flush=True,
     )
     cmd = ["bash", str(patched_wrapper), *forwarded]

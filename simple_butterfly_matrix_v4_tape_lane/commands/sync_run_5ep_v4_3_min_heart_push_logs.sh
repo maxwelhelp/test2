@@ -3,9 +3,6 @@ set -euo pipefail
 
 cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
-echo "[v4.3 sync] git pull"
-git pull --ff-only
-
 TS="$(date +%Y%m%d_%H%M%S)"
 REPORT_DIR="${OUT_DIR:-simple_butterfly_matrix_v4_tape_lane/agent_reports/v4_3_canonical_${TS}}"
 mkdir -p "$REPORT_DIR"
@@ -25,10 +22,6 @@ MAX_TRAIN_BATCHES="${MAX_TRAIN_BATCHES:-0}"
 MAX_VAL_BATCHES="${MAX_VAL_BATCHES:-0}"
 COMPARE_TO="${COMPARE_TO:-v4.3_audit_fixed same seed/config or baseline_missing}"
 MAIN_FILE="simple_butterfly_matrix_v4_tape_lane/tape_lane_transport_v4_3_min_heart.py"
-CANON_FILE="simple_butterfly_matrix_v4_tape_lane/commands/canonicalize_v4_3_main.py"
-
-echo "[v4.3 sync] canonicalize main"
-python "$CANON_FILE" | tee "$REPORT_DIR/canonicalize.log"
 
 echo "[v4.3 sync] validate"
 bash simple_butterfly_matrix_v4_tape_lane/commands/validate_v4_3_min_heart.sh
@@ -94,8 +87,21 @@ set -e
 echo "[v4.3 sync] run_status=$RUN_STATUS" | tee "$REPORT_DIR/run_status.txt"
 
 STATUS="simple_butterfly_matrix_v4_tape_lane/AGENT_STATUS.md"
+if [ "$RUN_STATUS" -eq 0 ]; then
+  RUN_LABEL="pass"
+  REMAINING="- no runtime canonicalizer in standard sync; context-controller is intentionally separate"
+else
+  RUN_LABEL="fail"
+  REMAINING="- inspect $REPORT_DIR/train.log and $REPORT_DIR/run_status.txt"
+fi
 cat > "$STATUS" <<EOF_STATUS
 # Agent Status
+
+Current stage: v4.3 canonical main stabilization
+Entrypoint: $MAIN_FILE
+Runtime wrappers: not used by standard sync
+Canonicalizer: deprecated / not used in runtime
+Smoke status: $RUN_LABEL
 
 Last run: v4.3_canonical_main
 Timestamp: $TS
@@ -104,7 +110,7 @@ Command: sync_run_5ep_v4_3_min_heart_push_logs.sh
 Run status: $RUN_STATUS
 
 Canonical main:
-- canonicalizer: $CANON_FILE
+- canonicalizer: deprecated / not used in runtime
 - entrypoint: $MAIN_FILE
 - wrapper: not used by standard sync
 - still observer-only: candidate deploy=false, no editor auto-deploy
@@ -118,7 +124,6 @@ Speed config:
 - max_val_batches: $MAX_VAL_BATCHES
 
 Expected artifacts:
-- canonicalize.log
 - grad_sanity.json
 - grad_sanity.log
 - speed_config.txt
@@ -130,6 +135,12 @@ Expected artifacts:
 - final_report.json
 - train.log
 - run_status.txt
+
+Known remaining issues:
+$REMAINING
+
+Next step:
+- only after stable 5ep, test context-controller separately
 
 No checkpoints should be committed.
 EOF_STATUS
@@ -164,23 +175,6 @@ except Exception as e:
     with open(dst, 'a', encoding='utf-8') as f:
         f.write(f'\nSummary parse failed: {e}\n')
 PY
-fi
-
-echo "[v4.3 sync] git add logs and canonical source"
-find "$REPORT_DIR" -maxdepth 1 \( -name '*.json' -o -name '*.csv' -o -name '*.txt' -o -name '*.log' \) -print -exec git add {} +
-git add "$STATUS" "$MAIN_FILE" "$CANON_FILE"
-
-echo "[v4.3 sync] ensure no checkpoint files staged"
-if git diff --cached --name-only | grep -E '\.(pt|pth|ckpt|safetensors)$'; then
-  echo "[v4.3 sync] ERROR: checkpoint file staged"
-  exit 1
-fi
-
-if git diff --cached --quiet; then
-  echo "[v4.3 sync] no logs/source changes to commit"
-else
-  git commit -m "Add v4.3 canonical main run logs $TS"
-  git push
 fi
 
 echo "[v4.3 sync] done: $REPORT_DIR status=$RUN_STATUS"

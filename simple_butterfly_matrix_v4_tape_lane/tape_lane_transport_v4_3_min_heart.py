@@ -61,6 +61,22 @@ def _safe_float(x, default: float = 0.0) -> float:
         return float(default)
 
 
+def _candidate_key(c):
+    """Stable duplicate key for candidate suggestions."""
+    loc = c.get("location", {})
+    if isinstance(loc, dict):
+        loc_key = tuple(sorted((str(k), str(v)) for k, v in loc.items()))
+    else:
+        loc_key = str(loc)
+    return (
+        str(c.get("source", "")),
+        str(c.get("target_type", "")),
+        str(c.get("action", "")),
+        str(c.get("target", "")),
+        loc_key,
+    )
+
+
 class ClassMatrixLaneHeadV43(v42.ClassMatrixLaneHead):
     """v4.2 head with non-detached attention for differentiable shortcut losses.
 
@@ -329,23 +345,7 @@ def aux_losses_v43(logits: torch.Tensor, baux, haux: Dict[str, torch.Tensor], ar
     out["skip_gate_mean"] = torch.zeros((), device=logits.device)
     out["skip_cost"] = torch.zeros((), device=logits.device)
     out["update_collapse_proxy"] = residual_proxy.detach()
-    out["update_collapse_proxy"] = residual_proxy.detach()
-    out["update_collapse_proxy"] = residual_proxy.detach()
-    out["update_collapse_proxy"] = residual_proxy.detach()
-    out["update_collapse_proxy"] = residual_proxy.detach()
-    out["update_collapse_proxy"] = residual_proxy.detach()
-    out["update_collapse_proxy"] = residual_proxy.detach()
-    out["update_collapse_proxy"] = residual_proxy.detach()
-    out["update_collapse_proxy"] = residual_proxy.detach()
-    out["update_collapse_proxy"] = residual_proxy.detach()
-    out["update_collapse_proxy"] = residual_proxy.detach()
-    out["update_collapse_proxy"] = residual_proxy.detach()
-    out["update_collapse_proxy"] = residual_proxy.detach()
-    out["update_collapse_proxy"] = residual_proxy.detach()
-    out["update_collapse_proxy"] = residual_proxy.detach()
-    out["update_collapse_proxy"] = residual_proxy.detach()
-    out["update_collapse_proxy"] = residual_proxy.detach()
-    out["residual_dominance_proxy"] = residual_proxy.detach()  # deprecated alias  # deprecated alias  # deprecated alias  # deprecated alias  # deprecated alias  # deprecated alias  # deprecated alias  # deprecated alias  # deprecated alias  # deprecated alias  # deprecated alias  # deprecated alias  # deprecated alias  # deprecated alias  # deprecated alias  # deprecated alias  # deprecated alias
+    out["residual_dominance_proxy"] = residual_proxy.detach()  # deprecated alias
     out["operator_complexity_cost"] = torch.zeros((), device=logits.device)
     return out
 
@@ -518,6 +518,7 @@ def build_trace_feedback(rep: Dict, args, epoch: int) -> Dict:
     primitive_weights = rep.get("primitive_weights", [])
     seq_nonflat = float(seq_change.mean()) if seq_change.numel() else 0.0
     memory_consumer_proxy = memory_future_read + head_memory
+    update_collapse_proxy = 1.0 / (float(updates.mean()) + 1e-6) if updates.numel() else 0.0
 
     flags = []
     entropy_mean = float(_tensor_from_list(rep.get("route_entropy", [])).mean()) if rep.get("route_entropy") else 0.0
@@ -573,24 +574,29 @@ def build_trace_feedback(rep: Dict, args, epoch: int) -> Dict:
         "memory": {"write_mean": memory_write, "write_cost": memory_write, "overwrite_score": memory_overwrite, "future_read": memory_future_read, "head_consumer": head_memory, "consumer_score": memory_consumer_proxy, "memory_consumer_proxy": memory_consumer_proxy},
         "head": {"detail_attention_mass": detail_attention, "detail_head_shortcut_cost": detail_cost, "detail_topread_share": detail_topread, "class_lane_mass": rep.get("class_lane_mass", []), "lane_mass_mean": lane_mass_mean, "top_reads": rep.get("class_top_reads", [])},
         "operators": {"primitive_weights": primitive_weights, "primitive_names": rep.get("primitive_names", list(PRIMITIVES))},
-        "budget": {"skip_gate_mean": 0.0, "skip_cost": "not_implemented", "operator_complexity_cost": "not_implemented", "update_collapse_proxy": None},
+        "budget": {"skip_gate_mean": 0.0, "skip_cost": "not_implemented", "operator_complexity_cost": "not_implemented", "update_collapse_proxy": update_collapse_proxy},
     }
 
 
 def generate_candidate_suggestions(trace: Dict, args, epoch: int) -> Dict:
     candidates: List[Dict] = []
     seen = set()
+    attempted_candidates = 0
+    skipped_duplicates = 0
 
     def add(c: Dict):
-        if len(candidates) >= int(args.max_candidates_per_epoch):
-            return
+        nonlocal attempted_candidates, skipped_duplicates
+        attempted_candidates += 1
         c.setdefault("delta_scale", 0.03)
         c.setdefault("risk", "low")
         c["deploy"] = False
         key = _candidate_key(c)
         if key in seen:
+            skipped_duplicates += 1
             return
         seen.add(key)
+        if len(candidates) >= int(args.max_candidates_per_epoch):
+            return
         candidates.append(c)
 
     route = trace.get("route", {})
@@ -658,7 +664,7 @@ def generate_candidate_suggestions(trace: Dict, args, epoch: int) -> Dict:
             })
 
     mem_write = float(memory.get("write_mean", 0.0))
-    mem_consumer = float(memory.get("consumer_score", 0.0))
+    mem_consumer = float(memory.get("memory_consumer_proxy", memory.get("consumer_score", 0.0)))
     if mem_write > 0.35 and mem_consumer < 0.10:
         add({
             "source": "memory_consumer_rule",
@@ -667,7 +673,7 @@ def generate_candidate_suggestions(trace: Dict, args, epoch: int) -> Dict:
             "action": "decrease",
             "target": "memory_write_or_overwrite",
             "reason": "memory write is high but future/head consumer is low",
-            "evidence_metrics": {"memory_write": mem_write, "memory_consumer_score": mem_consumer},
+            "evidence_metrics": {"memory_write": mem_write, "memory_consumer_proxy": mem_consumer},
             "risk": "medium",
         })
     if mem_write > 0.20 and mem_consumer > 0.15:
@@ -678,7 +684,7 @@ def generate_candidate_suggestions(trace: Dict, args, epoch: int) -> Dict:
             "action": "increase",
             "target": "route.memory->state",
             "reason": "memory appears useful; future Heart should test memory->state route rather than killing memory",
-            "evidence_metrics": {"memory_write": mem_write, "memory_consumer_score": mem_consumer},
+            "evidence_metrics": {"memory_write": mem_write, "memory_consumer_proxy": mem_consumer},
             "risk": "low",
         })
 
@@ -729,41 +735,10 @@ def generate_candidate_suggestions(trace: Dict, args, epoch: int) -> Dict:
             "by_target_type": by_target,
             "by_step": by_step,
             "by_lane": by_lane,
-            "attempted_candidates": len(candidates),
-            "skipped_duplicates": 0,
-            "attempted_candidates": len(candidates),
-            "skipped_duplicates": 0,
-            "attempted_candidates": len(candidates),
-            "skipped_duplicates": 0,
-            "attempted_candidates": len(candidates),
-            "skipped_duplicates": 0,
-            "attempted_candidates": len(candidates),
-            "skipped_duplicates": 0,
-            "attempted_candidates": len(candidates),
-            "skipped_duplicates": 0,
-            "attempted_candidates": len(candidates),
-            "skipped_duplicates": 0,
-            "attempted_candidates": len(candidates),
-            "skipped_duplicates": 0,
-            "attempted_candidates": len(candidates),
-            "skipped_duplicates": 0,
-            "attempted_candidates": len(candidates),
-            "skipped_duplicates": 0,
-            "attempted_candidates": len(candidates),
-            "skipped_duplicates": 0,
-            "attempted_candidates": len(candidates),
-            "skipped_duplicates": 0,
-            "attempted_candidates": len(candidates),
-            "skipped_duplicates": 0,
-            "attempted_candidates": len(candidates),
-            "skipped_duplicates": 0,
-            "attempted_candidates": len(candidates),
-            "skipped_duplicates": 0,
-            "attempted_candidates": len(candidates),
-            "skipped_duplicates": 0,
-            "attempted_candidates": len(candidates),
-            "skipped_duplicates": 0,
-            "duplicate_rate": 0.0,
+            "selected_candidates": len(candidates),
+            "attempted_candidates": attempted_candidates,
+            "skipped_duplicates": skipped_duplicates,
+            "duplicate_rate": skipped_duplicates / max(1, attempted_candidates),
         },
     }
 
@@ -796,54 +771,6 @@ def write_chatgpt_report(out_dir: Path, analysis: Dict, trace: Dict, candidates:
         f"- boundary_flatness/std: {float(route.get('boundary_flatness', 0.0)):.4f}",
         f"- boundary_peak_count: {int(route.get('boundary_peak_count', 0))} peaks={peaks}",
         f"- offdiag_outside_boundary_cost: {float(route.get('offdiag_outside_boundary_cost', 0.0)):.4f}",
-        f"- self_route_mass: {float(route.get('self_route_mass', 0.0)):.4f}",
-        f"- useful_transition_mass: {float(route.get('useful_transition_mass', 0.0)):.4f}",
-        f"- collapse_flags: {','.join(trace.get('collapse_flags', []) or []) if trace.get('collapse_flags') else 'NONE'}",
-        f"- self_route_mass: {float(route.get('self_route_mass', 0.0)):.4f}",
-        f"- useful_transition_mass: {float(route.get('useful_transition_mass', 0.0)):.4f}",
-        f"- collapse_flags: {','.join(trace.get('collapse_flags', []) or []) if trace.get('collapse_flags') else 'NONE'}",
-        f"- self_route_mass: {float(route.get('self_route_mass', 0.0)):.4f}",
-        f"- useful_transition_mass: {float(route.get('useful_transition_mass', 0.0)):.4f}",
-        f"- collapse_flags: {','.join(trace.get('collapse_flags', []) or []) if trace.get('collapse_flags') else 'NONE'}",
-        f"- self_route_mass: {float(route.get('self_route_mass', 0.0)):.4f}",
-        f"- useful_transition_mass: {float(route.get('useful_transition_mass', 0.0)):.4f}",
-        f"- collapse_flags: {','.join(trace.get('collapse_flags', []) or []) if trace.get('collapse_flags') else 'NONE'}",
-        f"- self_route_mass: {float(route.get('self_route_mass', 0.0)):.4f}",
-        f"- useful_transition_mass: {float(route.get('useful_transition_mass', 0.0)):.4f}",
-        f"- collapse_flags: {','.join(trace.get('collapse_flags', []) or []) if trace.get('collapse_flags') else 'NONE'}",
-        f"- self_route_mass: {float(route.get('self_route_mass', 0.0)):.4f}",
-        f"- useful_transition_mass: {float(route.get('useful_transition_mass', 0.0)):.4f}",
-        f"- collapse_flags: {','.join(trace.get('collapse_flags', []) or []) if trace.get('collapse_flags') else 'NONE'}",
-        f"- self_route_mass: {float(route.get('self_route_mass', 0.0)):.4f}",
-        f"- useful_transition_mass: {float(route.get('useful_transition_mass', 0.0)):.4f}",
-        f"- collapse_flags: {','.join(trace.get('collapse_flags', []) or []) if trace.get('collapse_flags') else 'NONE'}",
-        f"- self_route_mass: {float(route.get('self_route_mass', 0.0)):.4f}",
-        f"- useful_transition_mass: {float(route.get('useful_transition_mass', 0.0)):.4f}",
-        f"- collapse_flags: {','.join(trace.get('collapse_flags', []) or []) if trace.get('collapse_flags') else 'NONE'}",
-        f"- self_route_mass: {float(route.get('self_route_mass', 0.0)):.4f}",
-        f"- useful_transition_mass: {float(route.get('useful_transition_mass', 0.0)):.4f}",
-        f"- collapse_flags: {','.join(trace.get('collapse_flags', []) or []) if trace.get('collapse_flags') else 'NONE'}",
-        f"- self_route_mass: {float(route.get('self_route_mass', 0.0)):.4f}",
-        f"- useful_transition_mass: {float(route.get('useful_transition_mass', 0.0)):.4f}",
-        f"- collapse_flags: {','.join(trace.get('collapse_flags', []) or []) if trace.get('collapse_flags') else 'NONE'}",
-        f"- self_route_mass: {float(route.get('self_route_mass', 0.0)):.4f}",
-        f"- useful_transition_mass: {float(route.get('useful_transition_mass', 0.0)):.4f}",
-        f"- collapse_flags: {','.join(trace.get('collapse_flags', []) or []) if trace.get('collapse_flags') else 'NONE'}",
-        f"- self_route_mass: {float(route.get('self_route_mass', 0.0)):.4f}",
-        f"- useful_transition_mass: {float(route.get('useful_transition_mass', 0.0)):.4f}",
-        f"- collapse_flags: {','.join(trace.get('collapse_flags', []) or []) if trace.get('collapse_flags') else 'NONE'}",
-        f"- self_route_mass: {float(route.get('self_route_mass', 0.0)):.4f}",
-        f"- useful_transition_mass: {float(route.get('useful_transition_mass', 0.0)):.4f}",
-        f"- collapse_flags: {','.join(trace.get('collapse_flags', []) or []) if trace.get('collapse_flags') else 'NONE'}",
-        f"- self_route_mass: {float(route.get('self_route_mass', 0.0)):.4f}",
-        f"- useful_transition_mass: {float(route.get('useful_transition_mass', 0.0)):.4f}",
-        f"- collapse_flags: {','.join(trace.get('collapse_flags', []) or []) if trace.get('collapse_flags') else 'NONE'}",
-        f"- self_route_mass: {float(route.get('self_route_mass', 0.0)):.4f}",
-        f"- useful_transition_mass: {float(route.get('useful_transition_mass', 0.0)):.4f}",
-        f"- collapse_flags: {','.join(trace.get('collapse_flags', []) or []) if trace.get('collapse_flags') else 'NONE'}",
-        f"- self_route_mass: {float(route.get('self_route_mass', 0.0)):.4f}",
-        f"- useful_transition_mass: {float(route.get('useful_transition_mass', 0.0)):.4f}",
-        f"- collapse_flags: {','.join(trace.get('collapse_flags', []) or []) if trace.get('collapse_flags') else 'NONE'}",
         f"- self_route_mass: {float(route.get('self_route_mass', 0.0)):.4f}",
         f"- useful_transition_mass: {float(route.get('useful_transition_mass', 0.0)):.4f}",
         f"- collapse_flags: {','.join(trace.get('collapse_flags', []) or []) if trace.get('collapse_flags') else 'NONE'}",
@@ -1014,6 +941,7 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--lambda-skip-cost", type=float, default=0.0)
     p.add_argument("--lambda-memory-write-cost", type=float, default=0.003)
     p.add_argument("--lambda-operator-complexity", type=float, default=0.0)
+    p.add_argument("--memory-write-warmup-epochs", type=int, default=2)
     p.add_argument("--detail-head-shortcut-target", type=float, default=0.42)
     p.add_argument("--boundary-peak-threshold", type=float, default=0.35)
     p.add_argument("--late-input-start", type=float, default=0.45)

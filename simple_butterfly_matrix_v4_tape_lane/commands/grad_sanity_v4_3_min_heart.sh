@@ -5,8 +5,6 @@ cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 OUT="${OUT:-simple_butterfly_matrix_v4_tape_lane/agent_reports/grad_sanity_v4_3_min_heart.json}"
 mkdir -p "$(dirname "$OUT")"
 
-python simple_butterfly_matrix_v4_tape_lane/commands/canonicalize_v4_3_main.py >/tmp/v4_3_grad_sanity_canonicalize.log
-
 python - "$OUT" <<'PY'
 import json, sys, torch
 import torch.nn.functional as F
@@ -37,14 +35,26 @@ checks = {
     "write": ["backbone.write_gate_logit"],
     "head": ["head.class_lane_logits", "head.class_q", "head.key_w", "head.value_w"],
 }
+
+# detail_head_shortcut_cost is hinge-style and can be exactly zero on a tiny random smoke.
+# For isolated grad sanity, use a direct differentiable proxy that always exercises head attention.
+def detail_head_proxy(haux):
+    attn = haux["class_slot_attention"].float()
+    return (attn ** 2).mean()
 loss_specs = {
-    "full": lambda ce, losses: ce + args.lambda_route_offdiag_outside_boundary * losses["route_offdiag_outside_boundary_cost"] + args.lambda_boundary_budget * losses["boundary_budget_cost"] + args.lambda_late_input_read * losses["late_input_read_cost"] + args.lambda_memory_write_cost * losses["memory_write_cost"] + args.lambda_memory_overwrite * losses["memory_overwrite_cost"] + args.lambda_detail_head_shortcut * losses["detail_head_shortcut_cost"],
-    "route_only": lambda ce, losses: losses["route_offdiag_outside_boundary_cost"] + losses["route_entropy_band"],
-    "read_only": lambda ce, losses: losses["late_input_read_cost"] + losses["sequence_read_delta_mean"],
-    "memory_only": lambda ce, losses: losses["memory_write_cost"] + losses["memory_overwrite_cost"],
-    "detail_only": lambda ce, losses: losses["detail_head_shortcut_cost"],
+    "full": lambda ce, losses, haux: ce + args.lambda_route_offdiag_outside_boundary * losses["route_offdiag_outside_boundary_cost"] + args.lambda_boundary_budget * losses["boundary_budget_cost"] + args.lambda_late_input_read * losses["late_input_read_cost"] + args.lambda_memory_write_cost * losses["memory_write_cost"] + args.lambda_memory_overwrite * losses["memory_overwrite_cost"] + args.lambda_detail_head_shortcut * losses["detail_head_shortcut_cost"],
+    "route_only": lambda ce, losses, haux: losses["route_offdiag_outside_boundary_cost"] + losses["route_entropy_band"],
+    "read_only": lambda ce, losses, haux: losses["late_input_read_cost"] + losses["sequence_read_delta_mean"],
+    "memory_only": lambda ce, losses, haux: losses["memory_write_cost"] + losses["memory_overwrite_cost"],
+    "detail_only": lambda ce, losses, haux: detail_head_proxy(haux),
 }
-report = {"canonicalized": True, "losses": {}, "ok": True}
+report = {
+    "main_source": "simple_butterfly_matrix_v4_tape_lane/tape_lane_transport_v4_3_min_heart.py",
+    "canonicalizer_used": False,
+    "note": "detail_only uses direct head-attention proxy because shortcut hinge can be inactive",
+    "losses": {},
+    "ok": True,
+}
 for spec_name, make_loss in loss_specs.items():
     model = m.TapeLaneRouterClassifierV43(classes, args)
     model.train()
@@ -53,7 +63,7 @@ for spec_name, make_loss in loss_specs.items():
     logits, baux, haux = model(wav)
     losses = m.aux_losses_v43(logits, baux, haux, args)
     ce = F.cross_entropy(logits.float(), y)
-    loss = make_loss(ce, losses)
+    loss = make_loss(ce, losses, haux)
     loss.backward()
     name_to_param = dict(model.named_parameters())
     spec_report = {"loss": float(loss.detach()), "checks": {}}

@@ -1,0 +1,5 @@
+[growth_planner] wrote /home/maxwelhelp/test/sience/experiments/math_search/WORKING_BEST/test2_projection_scout/simple_butterfly_matrix_v4_tape_lane/agent_reports/v4_5_three_stage_growth_20260618_213114/program_growth_plan_epoch_007.json
+  insert_before pos=2 new_T=4 type=pre_aggregation_refine reason=last aggregation step is weak; insert a refine/head-prepare step before final aggregator instead of moving aggregator
+  insert_after pos=1 new_T=4 type=local_transform_route_refine reason=step has high weakness score; insert a transform/route refine stage after it
+  insert_after pos=0 new_T=4 type=local_transform_route_refine reason=step has high weakness score; insert a transform/route refine stage after it
+  keep_T_strengthen_last_aggregator pos=2 new_T=3 type=aggregation_head_prepare reason=classification usually benefits from a final aggregation/head-prepare stage; try strengthening before adding depth

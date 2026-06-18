@@ -1,0 +1,187 @@
+{
+  "epoch": 7,
+  "growth_proposals": [
+    {
+      "action": "insert_before",
+      "evidence": {
+        "signals": {
+          "boundary": 0.7483540773391724,
+          "future_read": 0.0,
+          "memory_write": 0.0,
+          "primitive_delta": 0.0,
+          "read_delta": 0.0,
+          "route_delta": 0.0,
+          "sequence_change": 0.0,
+          "update_delta": 0.0,
+          "useful_transition": 0.1053081527352333
+        },
+        "t": 2,
+        "weakness_score": 0.01763
+      },
+      "new_T": 4,
+      "position": 2,
+      "reason": "last aggregation step is weak; insert a refine/head-prepare step before final aggregator instead of moving aggregator",
+      "stage_type": "pre_aggregation_refine",
+      "target_effect": {
+        "boundary": "soft peak before aggregator",
+        "primitive": [
+          "ctx_matrix",
+          "product_gate",
+          "low_rank"
+        ],
+        "route": [
+          "state->abstract",
+          "memory->state"
+        ]
+      }
+    },
+    {
+      "action": "insert_after",
+      "evidence": {
+        "signals": {
+          "boundary": 0.7972322702407837,
+          "future_read": 0.0,
+          "memory_write": 0.0,
+          "primitive_delta": 0.018045568838715553,
+          "read_delta": 0.0,
+          "route_delta": 0.0,
+          "sequence_change": 0.11137856543064117,
+          "update_delta": 0.0,
+          "useful_transition": 0.11244074255228043
+        },
+        "t": 1,
+        "weakness_score": 0.009071
+      },
+      "new_T": 4,
+      "position": 1,
+      "reason": "step has high weakness score; insert a transform/route refine stage after it",
+      "stage_type": "local_transform_route_refine",
+      "target_effect": {
+        "boundary": "sparse peak if after-context changes",
+        "primitive": [
+          "diff",
+          "ctx_matrix",
+          "gated_contrast"
+        ],
+        "route": [
+          "detail->state",
+          "state->abstract"
+        ]
+      }
+    },
+    {
+      "action": "insert_after",
+      "evidence": {
+        "signals": {
+          "boundary": 0.8131135702133179,
+          "future_read": 0.0,
+          "memory_write": 0.0,
+          "primitive_delta": 0.05219598114490509,
+          "read_delta": 0.0,
+          "route_delta": 0.0,
+          "sequence_change": 0.10991767793893814,
+          "update_delta": 0.0,
+          "useful_transition": 0.11717398464679718
+        },
+        "t": 0,
+        "weakness_score": 0.003391
+      },
+      "new_T": 4,
+      "position": 0,
+      "reason": "step has high weakness score; insert a transform/route refine stage after it",
+      "stage_type": "local_transform_route_refine",
+      "target_effect": {
+        "boundary": "sparse peak if after-context changes",
+        "primitive": [
+          "diff",
+          "ctx_matrix",
+          "gated_contrast"
+        ],
+        "route": [
+          "detail->state",
+          "state->abstract"
+        ]
+      }
+    },
+    {
+      "action": "keep_T_strengthen_last_aggregator",
+      "new_T": 3,
+      "position": 2,
+      "reason": "classification usually benefits from a final aggregation/head-prepare stage; try strengthening before adding depth",
+      "stage_type": "aggregation_head_prepare",
+      "target_effect": {
+        "boundary": "no new boundary required",
+        "primitive": [
+          "ctx_matrix",
+          "product_gate"
+        ],
+        "route": [
+          "state->abstract",
+          "memory->state",
+          "abstract->abstract"
+        ]
+      }
+    }
+  ],
+  "mode": "report_only_growth_decision",
+  "recommended_next_command_hint": "rerun with TAPE_STEPS=new_T from top proposal; do not push checkpoints",
+  "report_dir": "/home/maxwelhelp/test/sience/experiments/math_search/WORKING_BEST/test2_projection_scout/simple_butterfly_matrix_v4_tape_lane/agent_reports/v4_5_three_stage_growth_20260618_213114",
+  "scores": {
+    "T": 3,
+    "last_step": 2,
+    "step_scores": [
+      {
+        "signals": {
+          "boundary": 0.8131135702133179,
+          "future_read": 0.0,
+          "memory_write": 0.0,
+          "primitive_delta": 0.05219598114490509,
+          "read_delta": 0.0,
+          "route_delta": 0.0,
+          "sequence_change": 0.10991767793893814,
+          "update_delta": 0.0,
+          "useful_transition": 0.11717398464679718
+        },
+        "t": 0,
+        "weakness_score": 0.003391
+      },
+      {
+        "signals": {
+          "boundary": 0.7972322702407837,
+          "future_read": 0.0,
+          "memory_write": 0.0,
+          "primitive_delta": 0.018045568838715553,
+          "read_delta": 0.0,
+          "route_delta": 0.0,
+          "sequence_change": 0.11137856543064117,
+          "update_delta": 0.0,
+          "useful_transition": 0.11244074255228043
+        },
+        "t": 1,
+        "weakness_score": 0.009071
+      },
+      {
+        "signals": {
+          "boundary": 0.7483540773391724,
+          "future_read": 0.0,
+          "memory_write": 0.0,
+          "primitive_delta": 0.0,
+          "read_delta": 0.0,
+          "route_delta": 0.0,
+          "sequence_change": 0.0,
+          "update_delta": 0.0,
+          "useful_transition": 0.1053081527352333
+        },
+        "t": 2,
+        "weakness_score": 0.01763
+      }
+    ]
+  },
+  "skeleton_assumption": {
+    "first_step": "evidence/local preparation",
+    "last_step": "aggregation/head preparation for classification",
+    "middle_steps": "transform/route/memory work",
+    "note": "for sequence generation this assumption may change; for SpeechCommands classification it is a sane default"
+  },
+  "version": "program_growth_planner_v1"
+}

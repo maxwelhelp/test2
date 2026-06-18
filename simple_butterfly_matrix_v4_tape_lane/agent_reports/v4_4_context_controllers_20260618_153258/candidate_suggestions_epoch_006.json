@@ -1,0 +1,139 @@
+{
+  "epoch": 6,
+  "window": {
+    "type": "epoch",
+    "index": 6
+  },
+  "version": "v4.3_min_heart_canonical",
+  "candidates": [
+    {
+      "source": "boundary_specialization_rule",
+      "target_type": "boundary",
+      "location": {
+        "t": "all"
+      },
+      "action": "increase",
+      "target": "boundary_peak_contrast",
+      "reason": "boundary is flat or has no hard peaks; program stages are not separated",
+      "evidence_metrics": {
+        "boundary_peak_count": 12,
+        "boundary_soft_peak_count": 11.999999046325684,
+        "boundary_flatness": 0.001687802930970062
+      },
+      "risk": "medium",
+      "delta_scale": 0.03,
+      "deploy": false
+    },
+    {
+      "source": "boundary_rule",
+      "target_type": "boundary",
+      "location": {
+        "t": 4
+      },
+      "action": "decrease",
+      "target": "boundary",
+      "reason": "boundary is high but boundary_usefulness is low",
+      "evidence_metrics": {
+        "boundary": 0.9933993220329285,
+        "boundary_usefulness": 0.023693053051829338
+      },
+      "risk": "low",
+      "delta_scale": 0.03,
+      "deploy": false
+    },
+    {
+      "source": "boundary_rule",
+      "target_type": "boundary",
+      "location": {
+        "t": 7
+      },
+      "action": "decrease",
+      "target": "boundary",
+      "reason": "boundary is high but boundary_usefulness is low",
+      "evidence_metrics": {
+        "boundary": 0.9906241297721863,
+        "boundary_usefulness": 0.028494304046034813
+      },
+      "risk": "low",
+      "delta_scale": 0.03,
+      "deploy": false
+    },
+    {
+      "source": "boundary_rule",
+      "target_type": "boundary",
+      "location": {
+        "t": 8
+      },
+      "action": "decrease",
+      "target": "boundary",
+      "reason": "boundary is high but boundary_usefulness is low",
+      "evidence_metrics": {
+        "boundary": 0.9905192852020264,
+        "boundary_usefulness": 0.029454490169882774
+      },
+      "risk": "low",
+      "delta_scale": 0.03,
+      "deploy": false
+    },
+    {
+      "source": "boundary_rule",
+      "target_type": "boundary",
+      "location": {
+        "t": 11
+      },
+      "action": "decrease",
+      "target": "boundary",
+      "reason": "boundary is high but boundary_usefulness is low",
+      "evidence_metrics": {
+        "boundary": 0.9896482229232788,
+        "boundary_usefulness": 0.0
+      },
+      "risk": "low",
+      "delta_scale": 0.03,
+      "deploy": false
+    },
+    {
+      "source": "memory_consumer_rule",
+      "target_type": "route",
+      "location": {
+        "from_lane": "memory",
+        "to_lane": "state"
+      },
+      "action": "increase",
+      "target": "route.memory->state",
+      "reason": "memory appears useful; future Heart should test memory->state route rather than killing memory",
+      "evidence_metrics": {
+        "memory_write": 0.5976293683052063,
+        "memory_consumer_proxy": 0.43559040129184723
+      },
+      "risk": "low",
+      "delta_scale": 0.03,
+      "deploy": false
+    }
+  ],
+  "diversity": {
+    "by_source": {
+      "boundary_specialization_rule": 1,
+      "boundary_rule": 4,
+      "memory_consumer_rule": 1
+    },
+    "by_target_type": {
+      "boundary": 5,
+      "route": 1
+    },
+    "by_step": {
+      "all": 1,
+      "4": 1,
+      "7": 1,
+      "8": 1,
+      "11": 1
+    },
+    "by_lane": {},
+    "selected_candidates": 6,
+    "attempted_candidates": 6,
+    "skipped_duplicates": 0,
+    "duplicate_rate": 0.0,
+    "max_candidates_effective": 8,
+    "attempted_after_filter": 6
+  }
+}

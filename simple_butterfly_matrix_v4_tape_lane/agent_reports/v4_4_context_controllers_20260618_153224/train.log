@@ -1,0 +1,4 @@
+[v4.4] bridge entrypoint -> patched run_v4_3_context_controller.sh CONTEXT_CONTROLLER_SCALE=0.055 PRIMITIVE_CONTROLLER_SCALE=0.055 BOUNDARY_CONTROLLER_SCALE=0.055 BOUNDARY_ROUTE_GATE_SCALE=0.25 ALIVE_CONTROLLER_SCALE=0.0 alpha_min=0.01 alpha_max=0.1 fast_loader_override=disabled sequence_terms_compat=enabled primitive_controller=enabled budgeted_boundary_route_gate=enabled
+loaded datasets: train=12000 val=2000 classes=['yes', 'no', 'up', 'down', 'left', 'right', 'on', 'off', 'stop', 'go']
+TapeLaneRouter v4.3_min_heart params=2288955 T=12 lanes=4 cells=12 D=96 pairs=12 device=cuda amp=fp16
+epoch 001/1 train=2.3239/12.81% val=2.2976/11.98% best=11.98%@1 seq=0.0113 boundary_peaks=0

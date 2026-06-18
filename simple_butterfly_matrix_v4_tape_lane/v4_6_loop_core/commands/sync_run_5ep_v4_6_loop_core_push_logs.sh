@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 BRANCH="${BRANCH:-codex-full-agent-plan}"
 CORE_DIR="simple_butterfly_matrix_v4_tape_lane/v4_6_loop_core"
-MAIN_FILE="$CORE_DIR/tape_lane_transport_v4_6_loop_core.py"
+MAIN_FILE="$CORE_DIR/tape_lane_transport_v4_6_1_grouped_core.py"
 TS="$(date +%Y%m%d_%H%M%S)"
 REPORT_DIR="${OUT_DIR:-simple_butterfly_matrix_v4_tape_lane/agent_reports/v4_6_1_grouped_real_${TS}}"
 mkdir -p "$REPORT_DIR"

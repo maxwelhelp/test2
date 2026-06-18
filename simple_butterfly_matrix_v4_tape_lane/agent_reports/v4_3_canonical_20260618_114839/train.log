@@ -1,0 +1,14 @@
+loaded datasets: train=12000 val=2000 classes=['yes', 'no', 'up', 'down', 'left', 'right', 'on', 'off', 'stop', 'go']
+TapeLaneRouter v4.3_min_heart params=1522851 T=12 lanes=4 cells=12 D=96 pairs=12 device=cuda amp=fp16
+Traceback (most recent call last):
+  File "/home/maxwelhelp/test/sience/experiments/math_search/WORKING_BEST/test2/simple_butterfly_matrix_v4_tape_lane/tape_lane_transport_v4_3_min_heart.py", line 1030, in <module>
+    run(parser().parse_args())
+  File "/home/maxwelhelp/test/sience/experiments/math_search/WORKING_BEST/test2/simple_butterfly_matrix_v4_tape_lane/tape_lane_transport_v4_3_min_heart.py", line 951, in run
+    candidates = generate_candidate_suggestions(trace, args, epoch) if args.enable_candidate_suggestions else {"epoch": epoch, "candidates": [], "diversity": {}}
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/maxwelhelp/test/sience/experiments/math_search/WORKING_BEST/test2/simple_butterfly_matrix_v4_tape_lane/tape_lane_transport_v4_3_min_heart.py", line 633, in generate_candidate_suggestions
+    add({
+  File "/home/maxwelhelp/test/sience/experiments/math_search/WORKING_BEST/test2/simple_butterfly_matrix_v4_tape_lane/tape_lane_transport_v4_3_min_heart.py", line 590, in add
+    key = _candidate_key(c)
+          ^^^^^^^^^^^^^^
+NameError: name '_candidate_key' is not defined

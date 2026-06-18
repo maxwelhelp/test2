@@ -338,7 +338,10 @@ def aux_losses_v43(logits: torch.Tensor, baux, haux: Dict[str, torch.Tensor], ar
     out["update_collapse_proxy"] = residual_proxy.detach()
     out["update_collapse_proxy"] = residual_proxy.detach()
     out["update_collapse_proxy"] = residual_proxy.detach()
-    out["residual_dominance_proxy"] = residual_proxy.detach()  # deprecated alias  # deprecated alias  # deprecated alias  # deprecated alias  # deprecated alias  # deprecated alias  # deprecated alias  # deprecated alias  # deprecated alias  # deprecated alias
+    out["update_collapse_proxy"] = residual_proxy.detach()
+    out["update_collapse_proxy"] = residual_proxy.detach()
+    out["update_collapse_proxy"] = residual_proxy.detach()
+    out["residual_dominance_proxy"] = residual_proxy.detach()  # deprecated alias  # deprecated alias  # deprecated alias  # deprecated alias  # deprecated alias  # deprecated alias  # deprecated alias  # deprecated alias  # deprecated alias  # deprecated alias  # deprecated alias  # deprecated alias  # deprecated alias
     out["operator_complexity_cost"] = torch.zeros((), device=logits.device)
     return out
 
@@ -742,6 +745,12 @@ def generate_candidate_suggestions(trace: Dict, args, epoch: int) -> Dict:
             "skipped_duplicates": 0,
             "attempted_candidates": len(candidates),
             "skipped_duplicates": 0,
+            "attempted_candidates": len(candidates),
+            "skipped_duplicates": 0,
+            "attempted_candidates": len(candidates),
+            "skipped_duplicates": 0,
+            "attempted_candidates": len(candidates),
+            "skipped_duplicates": 0,
             "duplicate_rate": 0.0,
         },
     }
@@ -775,6 +784,15 @@ def write_chatgpt_report(out_dir: Path, analysis: Dict, trace: Dict, candidates:
         f"- boundary_flatness/std: {float(route.get('boundary_flatness', 0.0)):.4f}",
         f"- boundary_peak_count: {int(route.get('boundary_peak_count', 0))} peaks={peaks}",
         f"- offdiag_outside_boundary_cost: {float(route.get('offdiag_outside_boundary_cost', 0.0)):.4f}",
+        f"- self_route_mass: {float(route.get('self_route_mass', 0.0)):.4f}",
+        f"- useful_transition_mass: {float(route.get('useful_transition_mass', 0.0)):.4f}",
+        f"- collapse_flags: {','.join(trace.get('collapse_flags', []) or []) if trace.get('collapse_flags') else 'NONE'}",
+        f"- self_route_mass: {float(route.get('self_route_mass', 0.0)):.4f}",
+        f"- useful_transition_mass: {float(route.get('useful_transition_mass', 0.0)):.4f}",
+        f"- collapse_flags: {','.join(trace.get('collapse_flags', []) or []) if trace.get('collapse_flags') else 'NONE'}",
+        f"- self_route_mass: {float(route.get('self_route_mass', 0.0)):.4f}",
+        f"- useful_transition_mass: {float(route.get('useful_transition_mass', 0.0)):.4f}",
+        f"- collapse_flags: {','.join(trace.get('collapse_flags', []) or []) if trace.get('collapse_flags') else 'NONE'}",
         f"- self_route_mass: {float(route.get('self_route_mass', 0.0)):.4f}",
         f"- useful_transition_mass: {float(route.get('useful_transition_mass', 0.0)):.4f}",
         f"- collapse_flags: {','.join(trace.get('collapse_flags', []) or []) if trace.get('collapse_flags') else 'NONE'}",

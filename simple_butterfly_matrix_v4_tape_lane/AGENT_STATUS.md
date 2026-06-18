@@ -1,10 +1,10 @@
 # Agent Status
 
 Last run: v4.3_canonical_main
-Timestamp: 20260618_113503
-Report dir: simple_butterfly_matrix_v4_tape_lane/agent_reports/v4_3_canonical_20260618_113503
+Timestamp: 20260618_113934
+Report dir: simple_butterfly_matrix_v4_tape_lane/agent_reports/v4_3_canonical_20260618_113934
 Command: sync_run_5ep_v4_3_min_heart_push_logs.sh
-Run status: 2
+Run status: 1
 
 Canonical main:
 - canonicalizer: simple_butterfly_matrix_v4_tape_lane/commands/canonicalize_v4_3_main.py
@@ -13,12 +13,12 @@ Canonical main:
 - still observer-only: candidate deploy=false, no editor auto-deploy
 
 Speed config:
-- batch_size: 192
-- eval_batch_size: 512
-- workers: 6
+- batch_size: 128
+- eval_batch_size: 256
+- workers: 4
 - log_every: 100
-- max_train_batches: 0
-- max_val_batches: 0
+- max_train_batches: 10
+- max_val_batches: 3
 
 Expected artifacts:
 - canonicalize.log

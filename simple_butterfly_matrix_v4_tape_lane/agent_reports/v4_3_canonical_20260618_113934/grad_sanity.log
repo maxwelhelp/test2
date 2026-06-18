@@ -1,0 +1,228 @@
+{
+  "canonicalized": true,
+  "note": "detail_only uses direct head-attention proxy because shortcut hinge can be inactive",
+  "losses": {
+    "full": {
+      "loss": 2.2990498542785645,
+      "checks": {
+        "route": {
+          "grad_abs_sum": 0.0038630017079412937,
+          "found": [
+            "backbone.route_logits"
+          ],
+          "ok": true
+        },
+        "boundary": {
+          "grad_abs_sum": 0.0007789183873683214,
+          "found": [
+            "backbone.boundary_logit"
+          ],
+          "ok": true
+        },
+        "read": {
+          "grad_abs_sum": 0.04934290796518326,
+          "found": [
+            "backbone.read_group_logits",
+            "backbone.read_query_w"
+          ],
+          "ok": true
+        },
+        "write": {
+          "grad_abs_sum": 0.003724662121385336,
+          "found": [
+            "backbone.write_gate_logit"
+          ],
+          "ok": true
+        },
+        "head": {
+          "grad_abs_sum": 19.58698074729182,
+          "found": [
+            "head.class_lane_logits",
+            "head.key_w",
+            "head.value_w",
+            "head.class_q"
+          ],
+          "ok": true
+        }
+      }
+    },
+    "route_only": {
+      "loss": 0.5539703369140625,
+      "checks": {
+        "route": {
+          "grad_abs_sum": 0.3244578242301941,
+          "found": [
+            "backbone.route_logits"
+          ],
+          "ok": true
+        },
+        "boundary": {
+          "grad_abs_sum": 0.12272481620311737,
+          "found": [
+            "backbone.boundary_logit"
+          ],
+          "ok": true
+        },
+        "read": {
+          "grad_abs_sum": 0.0,
+          "found": [
+            "backbone.read_group_logits",
+            "backbone.read_query_w"
+          ],
+          "ok": false
+        },
+        "write": {
+          "grad_abs_sum": 0.0,
+          "found": [
+            "backbone.write_gate_logit"
+          ],
+          "ok": false
+        },
+        "head": {
+          "grad_abs_sum": 0.0,
+          "found": [
+            "head.class_lane_logits",
+            "head.key_w",
+            "head.value_w",
+            "head.class_q"
+          ],
+          "ok": false
+        }
+      }
+    },
+    "read_only": {
+      "loss": 0.10019240528345108,
+      "checks": {
+        "route": {
+          "grad_abs_sum": 0.0,
+          "found": [
+            "backbone.route_logits"
+          ],
+          "ok": false
+        },
+        "boundary": {
+          "grad_abs_sum": 0.0,
+          "found": [
+            "backbone.boundary_logit"
+          ],
+          "ok": false
+        },
+        "read": {
+          "grad_abs_sum": 0.16290327906608582,
+          "found": [
+            "backbone.read_group_logits",
+            "backbone.read_query_w"
+          ],
+          "ok": true
+        },
+        "write": {
+          "grad_abs_sum": 0.0,
+          "found": [
+            "backbone.write_gate_logit"
+          ],
+          "ok": false
+        },
+        "head": {
+          "grad_abs_sum": 0.0,
+          "found": [
+            "head.class_lane_logits",
+            "head.key_w",
+            "head.value_w",
+            "head.class_q"
+          ],
+          "ok": false
+        }
+      }
+    },
+    "memory_only": {
+      "loss": 0.43117332458496094,
+      "checks": {
+        "route": {
+          "grad_abs_sum": 0.0,
+          "found": [
+            "backbone.route_logits"
+          ],
+          "ok": false
+        },
+        "boundary": {
+          "grad_abs_sum": 0.0,
+          "found": [
+            "backbone.boundary_logit"
+          ],
+          "ok": false
+        },
+        "read": {
+          "grad_abs_sum": 0.0,
+          "found": [
+            "backbone.read_group_logits",
+            "backbone.read_query_w"
+          ],
+          "ok": false
+        },
+        "write": {
+          "grad_abs_sum": 0.30718719959259033,
+          "found": [
+            "backbone.write_gate_logit"
+          ],
+          "ok": true
+        },
+        "head": {
+          "grad_abs_sum": 0.0,
+          "found": [
+            "head.class_lane_logits",
+            "head.key_w",
+            "head.value_w",
+            "head.class_q"
+          ],
+          "ok": false
+        }
+      }
+    },
+    "detail_only": {
+      "loss": 0.0002441414399072528,
+      "checks": {
+        "route": {
+          "grad_abs_sum": 7.534361329275541e-11,
+          "found": [
+            "backbone.route_logits"
+          ],
+          "ok": true
+        },
+        "boundary": {
+          "grad_abs_sum": 9.116963233619588e-14,
+          "found": [
+            "backbone.boundary_logit"
+          ],
+          "ok": true
+        },
+        "read": {
+          "grad_abs_sum": 4.841194047207342e-11,
+          "found": [
+            "backbone.read_group_logits",
+            "backbone.read_query_w"
+          ],
+          "ok": true
+        },
+        "write": {
+          "grad_abs_sum": 3.686721067319709e-11,
+          "found": [
+            "backbone.write_gate_logit"
+          ],
+          "ok": true
+        },
+        "head": {
+          "grad_abs_sum": 2.5689591609534546e-07,
+          "found": [
+            "head.class_lane_logits",
+            "head.key_w",
+            "head.value_w",
+            "head.class_q"
+          ],
+          "ok": true
+        }
+      }
+    }
+  },
+  "ok": true
+}
+[grad sanity] wrote simple_butterfly_matrix_v4_tape_lane/agent_reports/v4_3_canonical_20260618_113934/grad_sanity.json

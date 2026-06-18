@@ -1,0 +1,11 @@
+[v4.4] bridge entrypoint -> patched run_v4_3_context_controller.sh CONTEXT_CONTROLLER_SCALE=0.055 PRIMITIVE_CONTROLLER_SCALE=0.055 TRANSITION_CONTROLLER_SCALE=0.055 FANOUT_CONTROLLER_SCALE=0.055 BOUNDARY_CONTROLLER_SCALE=0.055 BOUNDARY_MEAN_TARGET=0.28 BOUNDARY_ROUTE_GATE_SCALE=0.25 ALIVE_CONTROLLER_SCALE=0.0 alpha_min=0.01 alpha_max=0.1 fast_loader_override=disabled sequence_terms_compat=enabled primitive_controller=enabled transition_controller=enabled fanout_controller=enabled boundary_mean_budget=enabled
+[v4.5 scout] loaded feedback: simple_butterfly_matrix_v4_tape_lane/agent_reports/v4_4_context_controllers_20260618_174455/scout_runtime_feedback_epoch_001.json scale=0.015 active=True
+loaded datasets: train=12000 val=2000 classes=['yes', 'no', 'up', 'down', 'left', 'right', 'on', 'off', 'stop', 'go']
+TapeLaneRouter v4.3_min_heart params=2406117 T=12 lanes=4 cells=12 D=96 pairs=12 device=cuda amp=fp16
+epoch 001/7 train=2.2031/17.83% val=2.0787/20.50% best=20.50%@1 seq=0.0176 boundary_peaks=0
+epoch 002/7 train=2.0696/23.35% val=1.9968/23.80% best=23.80%@2 seq=0.0202 boundary_peaks=0
+epoch 003/7 train=1.9235/29.58% val=1.9076/28.95% best=28.95%@3 seq=0.0210 boundary_peaks=3
+epoch 004/7 train=1.7829/34.98% val=1.7659/33.40% best=33.40%@4 seq=0.0243 boundary_peaks=12
+epoch 005/7 train=1.6816/38.56% val=1.5917/39.80% best=39.80%@5 seq=0.0283 boundary_peaks=12
+epoch 006/7 train=1.6033/42.07% val=1.5220/43.75% best=43.75%@6 seq=0.0312 boundary_peaks=12
+epoch 007/7 train=1.5308/44.35% val=1.4938/45.40% best=45.40%@7 seq=0.0351 boundary_peaks=12

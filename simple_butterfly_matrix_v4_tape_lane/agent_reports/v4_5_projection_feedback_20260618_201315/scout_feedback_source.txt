@@ -1,0 +1,9 @@
+[v4.5 sync] build scout feedback from simple_butterfly_matrix_v4_tape_lane/agent_reports/v4_4_context_controllers_20260618_174455
+[council_v2] report=/home/maxwelhelp/test/sience/experiments/math_search/WORKING_BEST/test2_projection_scout/simple_butterfly_matrix_v4_tape_lane/agent_reports/v4_4_context_controllers_20260618_174455
+[council_v2] wrote /home/maxwelhelp/test/sience/experiments/math_search/WORKING_BEST/test2_projection_scout/simple_butterfly_matrix_v4_tape_lane/agent_reports/v4_4_context_controllers_20260618_174455/projection_council_v2_epoch_001.json
+[council_v2] wrote /home/maxwelhelp/test/sience/experiments/math_search/WORKING_BEST/test2_projection_scout/simple_butterfly_matrix_v4_tape_lane/agent_reports/v4_4_context_controllers_20260618_174455/scout_runtime_feedback_epoch_001.json
+  dormant_primitive_wakeup: gain=0.011792 pqs=0.294806 move=0.033692 target=wake weak primitives in high-change region
+  abstract_head_prepare: gain=0.010278 pqs=0.256939 move=0.035513 target=make abstract lane useful for head
+  memory_write_read_pair: gain=0.010155 pqs=0.25388 move=0.03547 target=make memory write causal by adding later recall
+  global_fork_memory_recall: gain=0.008588 pqs=0.214702 move=0.035471 target=early fork + mid abstract + late memory recall
+  route_specialize_no_boundary: gain=0.007939 pqs=0.198472 move=0.033887 target=sharpen allowed routes without new stage boundary

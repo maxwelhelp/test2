@@ -1,6 +1,6 @@
 # simple_butterfly_matrix_v4_tape_lane
 
-TapeLaneRouter version.
+TapeLaneRouter v4.1.
 
 This is the next simple version after `simple_butterfly_matrix_v3`.
 
@@ -21,14 +21,16 @@ phase_slot_matrix
 phase_balance
 ```
 
-v4 removes these fixed phase roles.
-
-New structure:
+v4.1 removes these fixed phase roles and uses:
 
 ```text
 raw input/audio
   -> MatrixEvidence
-  -> X[B, lanes, cells_per_lane, D]
+  -> structured lane init X[B, lanes, cells_per_lane, D]
+       lane0 detail: resized local evidence + local diff/onset-like signal
+       lane1 state: learned attention init over evidence
+       lane2 abstract: global mean/std summary cells
+       lane3 memory: learned memory seed + weak global summary
   -> tape steps T0..Tn
        read -> transform -> soft lane route -> residual write
        step_alive[t]
@@ -49,6 +51,37 @@ no dynamic tensor shape growth in MVP
 class matrices and class-pair repair are kept
 ```
 
+## No stub code
+
+The repo code uses the real project modules:
+
+```text
+MatrixEvidence
+ChannelButterfly
+BlockButterfly
+make_loaders
+SpeechCommandsBalanced / synthetic loader from the base project
+```
+
+Any local sandbox stubs used to sanity-check syntax are not committed and are not part of this folder.
+
+## Separator
+
+The separator is not only a scalar boundary.
+
+```text
+separator_t = boundary_t + route_matrix_t
+```
+
+Where:
+
+```text
+boundary[t] marks soft program segment pressure
+route_matrix[t, from_lane, to_lane] moves information between lanes
+```
+
+Boundary biases routing but does not hard reset state.
+
 ## Lanes
 
 Default lanes are weak labels only:
@@ -62,13 +95,46 @@ memory
 
 They are not hard operator assignments. Training can override the soft routes and soft reads.
 
+## Transform primitives
+
+The transform bank is now real compute, not a placeholder:
+
+```text
+channel
+block
+low_rank
+ctx_matrix
+product_gate
+diff
+gated_contrast
+memory_keep
+```
+
+Read/write are dataflow. Transform primitives are compute operations.
+
 ## Main files
 
 ```text
 simple_butterfly_matrix_v4_tape_lane/tape_lane_transport.py
+simple_butterfly_matrix_v4_tape_lane/commands/validate_v4.sh
 simple_butterfly_matrix_v4_tape_lane/commands/run_smoke.sh
 simple_butterfly_matrix_v4_tape_lane/commands/run_speechcommands.sh
 simple_butterfly_matrix_v4_tape_lane/commands/sync_run_5ep_push_logs.sh
+```
+
+## Validate
+
+From repo root:
+
+```bash
+bash simple_butterfly_matrix_v4_tape_lane/commands/validate_v4.sh
+```
+
+This checks:
+
+```text
+python compile
+no old active phase-role code in v4 python files
 ```
 
 ## Fast smoke
@@ -87,7 +153,7 @@ From repo root:
 bash simple_butterfly_matrix_v4_tape_lane/commands/run_speechcommands.sh
 ```
 
-## One-script sync + run + push logs
+## One-script sync + validate + run + push logs
 
 From repo root:
 
@@ -99,6 +165,7 @@ This script does:
 
 ```text
 git pull --ff-only
+validate v4 code
 run 5 epochs
 write metrics/report/logs
 git add only text/csv/json logs
@@ -130,17 +197,21 @@ metrics.csv
 analysis_epoch_XXX.json
 final_report.json
 REPORT_TO_CHATGPT.txt
-train.log  # when using sync_run_5ep_push_logs.sh
+validate.log  # when using sync_run_5ep_push_logs.sh
+train.log     # when using sync_run_5ep_push_logs.sh
 ```
 
 Important fields in `analysis_epoch_XXX.json`:
 
 ```text
+lane_init_norm
 step_alive
 boundary
 route_matrix
 route_entropy
 read_group_mass
+primitive_names
+primitive_weights
 write_gate_by_step_lane
 update_norm_by_step_lane
 late_input_read_mass
@@ -161,6 +232,7 @@ step_alive separates useful early steps from dormant late steps
 late_input_read_mass is not huge
 class_lane_mass uses more than one lane
 class_top_reads are not only final slots
+primitive_weights differ by lane/step
 ```
 
 Bad signs:
@@ -171,4 +243,5 @@ all steps read raw input late
 routes stay identity forever
 boundaries collapse to all 0/all 1
 step_alive is flat for every step
+primitive_weights are identical everywhere
 ```

@@ -4,8 +4,9 @@
 Reads a v4.5 report and proposes where to insert the next tape step.
 
 Design:
-- start from a small 3-step program skeleton;
-- keep the last step as aggregation/head-preparation for classification;
+- start from a tiny 2-step seed when requested;
+- do not hard-code first/last as universal roles;
+- use weak task-aware priors derived from task mode / head behaviour;
 - find weak steps by route/read/primitive/update/boundary/head/memory proxies;
 - propose insert_before / insert_after candidates;
 - no weight mutation, no checkpoints, no auto-deploy.
@@ -68,7 +69,6 @@ def as_series(x, T):
 
 
 def mean_nested_step(x, T):
-    """Convert step list of nested numbers to one scalar per step."""
     out = []
     for t in range(T):
         vals = []
@@ -85,17 +85,26 @@ def mean_nested_step(x, T):
     return out
 
 
-def build_step_scores(trace: Dict[str, Any]) -> Dict[str, Any]:
+def infer_task_mode(trace: Dict[str, Any]) -> str:
+    # Current SpeechCommands runs are classification. Keep this configurable and weak.
+    classes = trace.get("classes") or get(trace, "final_report", "classes", default=[])
+    if isinstance(classes, list) and len(classes) >= 2:
+        return "classification"
+    return "unknown"
+
+
+def build_step_scores(trace: Dict[str, Any], task_mode: str) -> Dict[str, Any]:
     route = trace.get("route", {}) if isinstance(trace.get("route"), dict) else {}
     seq = trace.get("sequence", {}) if isinstance(trace.get("sequence"), dict) else {}
     read = trace.get("read", {}) if isinstance(trace.get("read"), dict) else {}
     memory = trace.get("memory", {}) if isinstance(trace.get("memory"), dict) else {}
+    head = trace.get("head", {}) if isinstance(trace.get("head"), dict) else {}
     rep = trace.get("matrix_report", {}) if isinstance(trace.get("matrix_report"), dict) else {}
 
     boundary = route.get("boundary_by_step", route.get("boundary", []))
     if not isinstance(boundary, list):
         boundary = []
-    T = max(3, len(boundary), len(seq.get("sequence_change_by_step", []) or []), len(read.get("read_delta_by_step", []) or []))
+    T = max(2, len(boundary), len(seq.get("sequence_change_by_step", []) or []), len(read.get("read_delta_by_step", []) or []))
 
     boundary = as_series(boundary, T)
     seq_change = as_series(seq.get("sequence_change_by_step", []), T)
@@ -107,7 +116,6 @@ def build_step_scores(trace: Dict[str, Any]) -> Dict[str, Any]:
     memory_write = as_series(memory.get("write_by_step", memory.get("memory_write_by_step", [])), T)
     future_read = as_series(memory.get("future_read_by_step", memory.get("memory_future_read_by_step", [])), T)
 
-    # If detailed arrays are missing, fall back to matrix report nested arrays.
     if not any(seq_change):
         seq_change = as_series(get(trace, "sequence", "sequence_change_by_step", default=[]), T)
     if not any(update_delta):
@@ -115,20 +123,23 @@ def build_step_scores(trace: Dict[str, Any]) -> Dict[str, Any]:
     if not any(memory_write):
         memory_write = mean_nested_step(get(rep, "write_gate_by_step_lane", default=[]), T)
 
+    detail_topread = fnum(head.get("detail_topread_share", trace.get("detail_topread_share", 0.0)), 0.0)
     last = T - 1
     step_scores = []
     for t in range(T):
-        # Weakness: high change but no boundary/useful transition, low update/read/primitive movement,
-        # memory write without future read, or last aggregator not clearly active.
         change_need = seq_change[t] + route_delta[t] + read_delta[t] + prim_delta[t] + update_delta[t]
         boundary_bad = max(0.0, change_need - boundary[t])
         route_bad = max(0.0, 0.12 - useful[t])
         memory_bad = max(0.0, memory_write[t] - future_read[t])
-        agg_bad = 0.0
-        if t == last:
-            # Last step should aggregate; if it has low change/useful/memory/head prep, mark it weak.
-            agg_bad = max(0.0, 0.10 - (useful[t] + update_delta[t] + read_delta[t]))
-        score = 1.7 * boundary_bad + 1.2 * route_bad + 0.7 * memory_bad + 1.0 * agg_bad
+        input_side_bad = 0.0
+        output_side_bad = 0.0
+        if t == 0:
+            # Weak input-side prior: first step should produce useful update/read, not necessarily fixed primitive.
+            input_side_bad = max(0.0, 0.08 - (read_delta[t] + update_delta[t] + prim_delta[t]))
+        if task_mode == "classification" and t == last:
+            # Weak output-side prior: classification often benefits from class-ready summary, but not hard-coded.
+            output_side_bad = max(0.0, 0.10 - (useful[t] + update_delta[t] + read_delta[t])) + max(0.0, detail_topread - 0.70)
+        score = 1.5 * boundary_bad + 1.2 * route_bad + 0.7 * memory_bad + 0.7 * input_side_bad + 0.8 * output_side_bad
         step_scores.append({
             "t": t,
             "weakness_score": round(float(score), 6),
@@ -142,34 +153,43 @@ def build_step_scores(trace: Dict[str, Any]) -> Dict[str, Any]:
                 "useful_transition": useful[t],
                 "memory_write": memory_write[t],
                 "future_read": future_read[t],
+                "detail_topread_share": detail_topread,
+                "input_side_bad": input_side_bad,
+                "output_side_bad": output_side_bad,
             },
         })
-    return {"T": T, "last_step": last, "step_scores": step_scores}
+    return {"T": T, "last_step": last, "task_mode": task_mode, "step_scores": step_scores}
 
 
 def propose_growth(scores: Dict[str, Any]) -> List[Dict[str, Any]]:
     T = int(scores["T"])
     last = int(scores["last_step"])
+    task_mode = str(scores.get("task_mode", "unknown"))
     ranked = sorted(scores["step_scores"], key=lambda r: r["weakness_score"], reverse=True)
     proposals: List[Dict[str, Any]] = []
 
-    # Never insert after the aggregator as default. For classification, last stays aggregation/head-prep.
-    for r in ranked[: min(4, len(ranked))]:
+    for r in ranked[: min(5, len(ranked))]:
         t = int(r["t"])
         sig = r["signals"]
-        if t == last:
+        if t == 0 and sig.get("input_side_bad", 0.0) > 0.0:
+            proposals.append({
+                "action": "insert_after",
+                "position": 0,
+                "new_T": T + 1,
+                "stage_type": "input_evidence_refine",
+                "reason": "input-side step has weak read/update/primitive movement; insert local evidence refine after input step",
+                "evidence": r,
+                "target_effect": {"route": ["detail->state"], "primitive": ["diff", "gated_contrast", "ctx_matrix"], "boundary": "only if after-context changes"},
+            })
+        elif t == last and task_mode == "classification" and sig.get("output_side_bad", 0.0) > 0.0:
             proposals.append({
                 "action": "insert_before",
                 "position": last,
                 "new_T": T + 1,
-                "stage_type": "pre_aggregation_refine",
-                "reason": "last aggregation step is weak; insert a refine/head-prepare step before final aggregator instead of moving aggregator",
+                "stage_type": "pre_output_summary_refine",
+                "reason": "classification output side looks weak or detail-head shortcut is high; insert refine before output/summary step",
                 "evidence": r,
-                "target_effect": {
-                    "route": ["state->abstract", "memory->state"],
-                    "primitive": ["ctx_matrix", "product_gate", "low_rank"],
-                    "boundary": "soft peak before aggregator",
-                },
+                "target_effect": {"route": ["state->abstract", "memory->state"], "primitive": ["ctx_matrix", "product_gate", "low_rank"], "boundary": "soft sparse peak before output only if useful"},
             })
         elif sig.get("memory_write", 0.0) > sig.get("future_read", 0.0) + 0.05:
             proposals.append({
@@ -179,39 +199,27 @@ def propose_growth(scores: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "stage_type": "memory_recall_or_cleanup",
                 "reason": "memory write appears higher than future read; insert a recall/check step after writer",
                 "evidence": r,
-                "target_effect": {
-                    "route": ["memory->state"],
-                    "primitive": ["ctx_matrix", "memory_keep"],
-                    "boundary": "memory recall boundary only if contrastive",
-                },
+                "target_effect": {"route": ["memory->state"], "primitive": ["ctx_matrix", "memory_keep"], "boundary": "memory recall boundary only if contrastive"},
             })
         else:
+            side = "after" if t < last else "before"
             proposals.append({
-                "action": "insert_after",
+                "action": f"insert_{side}",
                 "position": t,
                 "new_T": T + 1,
                 "stage_type": "local_transform_route_refine",
-                "reason": "step has high weakness score; insert a transform/route refine stage after it",
+                "reason": "step has high weakness score; model a new transform/route refine stage on the side with weaker context",
                 "evidence": r,
-                "target_effect": {
-                    "route": ["detail->state", "state->abstract"],
-                    "primitive": ["diff", "ctx_matrix", "gated_contrast"],
-                    "boundary": "sparse peak if after-context changes",
-                },
+                "target_effect": {"route": ["detail->state", "state->abstract"], "primitive": ["diff", "ctx_matrix", "gated_contrast"], "boundary": "sparse peak only if projected after-context improves"},
             })
 
-    # Always include a conservative baseline: keep T and strengthen final aggregator.
     proposals.append({
-        "action": "keep_T_strengthen_last_aggregator",
+        "action": "keep_T_strengthen_current_choices",
         "position": last,
         "new_T": T,
-        "stage_type": "aggregation_head_prepare",
-        "reason": "classification usually benefits from a final aggregation/head-prepare stage; try strengthening before adding depth",
-        "target_effect": {
-            "route": ["state->abstract", "memory->state", "abstract->abstract"],
-            "primitive": ["ctx_matrix", "product_gate"],
-            "boundary": "no new boundary required",
-        },
+        "stage_type": "no_growth_baseline",
+        "reason": "growth is optional; first compare to strengthening current read/route/primitive choices without adding exact depth",
+        "target_effect": {"route": ["allowed edges only"], "primitive": ["context-selected mixture"], "boundary": "no new boundary required"},
     })
     return proposals
 
@@ -220,18 +228,20 @@ def run(args):
     rd = Path(args.report_dir).resolve()
     epoch, tp = latest_trace(rd)
     trace = read_json(tp, {})
-    scores = build_step_scores(trace)
+    task_mode = args.task_mode if args.task_mode != "auto" else infer_task_mode(trace)
+    scores = build_step_scores(trace, task_mode)
     proposals = propose_growth(scores)
     out = {
-        "version": "program_growth_planner_v1",
+        "version": "program_growth_planner_v1_two_step_compatible",
         "mode": "report_only_growth_decision",
         "report_dir": str(rd),
         "epoch": epoch,
-        "skeleton_assumption": {
-            "first_step": "evidence/local preparation",
-            "middle_steps": "transform/route/memory work",
-            "last_step": "aggregation/head preparation for classification",
-            "note": "for sequence generation this assumption may change; for SpeechCommands classification it is a sane default",
+        "weak_prior_policy": {
+            "seed_steps": "2 by default",
+            "first_step": "weak input/evidence prior only, not fixed",
+            "last_step": "weak output/summary prior only for classification, not fixed",
+            "middle_steps": "created only when weakness/projection says depth is useful",
+            "note": "for another task/head, task_mode can change; growth is decided by trace weakness not hard-coded stage names",
         },
         "scores": scores,
         "growth_proposals": proposals,
@@ -240,13 +250,14 @@ def run(args):
     op = rd / f"program_growth_plan_epoch_{epoch:03d}.json"
     write_json(op, out)
     print(f"[growth_planner] wrote {op}")
-    for p in proposals[:4]:
+    for p in proposals[:5]:
         print(f"  {p['action']} pos={p['position']} new_T={p['new_T']} type={p['stage_type']} reason={p['reason']}")
 
 
 def parser():
     p = argparse.ArgumentParser()
     p.add_argument("--report-dir", required=True)
+    p.add_argument("--task-mode", choices=["auto", "classification", "unknown"], default="auto")
     return p
 
 

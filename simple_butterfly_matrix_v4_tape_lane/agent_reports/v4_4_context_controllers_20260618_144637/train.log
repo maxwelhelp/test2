@@ -1,0 +1,9 @@
+[v4.4] bridge entrypoint -> simple_butterfly_matrix_v4_tape_lane/commands/run_v4_3_context_controller.sh CONTEXT_CONTROLLER_SCALE=0.055 alpha_min=0.01 alpha_max=0.1
+Traceback (most recent call last):
+  File "<stdin>", line 312, in <module>
+  File "<stdin>", line 301, in run
+  File "/home/maxwelhelp/test/sience/experiments/math_search/WORKING_BEST/test2/simple_butterfly_matrix_v4_tape_lane/tape_lane_transport_v4_3_min_heart.py", line 1107, in run
+    train_loader, val_loader, classes, train_counts, val_counts = v42.make_loaders(args)
+                                                                  ^^^^^^^^^^^^^^^^^^^^^^
+  File "<stdin>", line 185, in make_loaders_fast
+AttributeError: module 'simple_butterfly_matrix_v4_tape_lane.tape_lane_transport_v4_2' has no attribute 'SpeechCommandsBalanced'

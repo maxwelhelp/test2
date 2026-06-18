@@ -21,6 +21,7 @@ import csv
 import json
 import math
 import sys
+import time
 from pathlib import Path
 from typing import Dict, List, Sequence, Tuple
 
@@ -41,6 +42,9 @@ LANE_NAMES = v42.LANE_NAMES
 READ_GROUP_NAMES = v42.READ_GROUP_NAMES
 PRIMITIVES = v42.PRIMITIVES
 
+_LANE_SLOT_CACHE: Dict[Tuple[int, int, int, str, str, bool], torch.Tensor] = {}
+_EYE_CACHE: Dict[Tuple[int, str, str], torch.Tensor] = {}
+
 
 def lane_name(i: int) -> str:
     return v42.lane_name(i)
@@ -59,6 +63,40 @@ def _safe_float(x, default: float = 0.0) -> float:
         return float(x)
     except Exception:
         return float(default)
+
+
+def _device_key(device: torch.device) -> str:
+    return f"{device.type}:{device.index}" if device.index is not None else device.type
+
+
+def _cached_lane_slot_matrix(
+    steps: int,
+    lanes: int,
+    cells: int,
+    device: torch.device,
+    dtype: torch.dtype,
+    normalize_rows: bool,
+) -> torch.Tensor:
+    key = (int(steps), int(lanes), int(cells), _device_key(device), str(dtype), bool(normalize_rows))
+    cached = _LANE_SLOT_CACHE.get(key)
+    if cached is None:
+        cached = v42.lane_slot_matrix(steps, lanes, cells, device, normalize_rows=normalize_rows).to(dtype=dtype)
+        _LANE_SLOT_CACHE[key] = cached
+    return cached
+
+
+def _cached_eye(n: int, device: torch.device, dtype: torch.dtype) -> torch.Tensor:
+    key = (int(n), _device_key(device), str(dtype))
+    cached = _EYE_CACHE.get(key)
+    if cached is None:
+        cached = torch.eye(n, device=device, dtype=dtype)
+        _EYE_CACHE[key] = cached
+    return cached
+
+
+def _sync_if_cuda(device: str) -> None:
+    if str(device).startswith("cuda") and torch.cuda.is_available():
+        torch.cuda.synchronize()
 
 
 def _candidate_key(c):
@@ -85,14 +123,46 @@ class ClassMatrixLaneHeadV43(v42.ClassMatrixLaneHead):
     tensors live for loss computation while reports explicitly detach when needed.
     """
 
+    def __init__(
+        self,
+        dim: int,
+        classes: int,
+        tape_steps: int,
+        lanes: int,
+        cells_per_lane: int,
+        pair_slots: int,
+        dropout: float,
+        lane_prior_strength: float,
+        class_lane_prior_mode: str,
+        class_lane_init_strength: float,
+    ):
+        super().__init__(
+            dim=dim,
+            classes=classes,
+            tape_steps=tape_steps,
+            lanes=lanes,
+            cells_per_lane=cells_per_lane,
+            pair_slots=pair_slots,
+            dropout=dropout,
+            lane_prior_strength=lane_prior_strength,
+            class_lane_prior_mode=class_lane_prior_mode,
+            class_lane_init_strength=class_lane_init_strength,
+        )
+        self.register_buffer(
+            "lane_map_prior_base",
+            v42.lane_slot_matrix(tape_steps, lanes, cells_per_lane, torch.device("cpu"), normalize_rows=True),
+            persistent=False,
+        )
+        self.register_buffer(
+            "lane_map_mass_base",
+            v42.lane_slot_matrix(tape_steps, lanes, cells_per_lane, torch.device("cpu"), normalize_rows=False),
+            persistent=False,
+        )
+
     def forward(self, slots: torch.Tensor) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
         bsz, slot_count, dim = slots.shape
-        lane_map_prior = v42.lane_slot_matrix(
-            self.tape_steps, self.lanes, self.cells_per_lane, slots.device, normalize_rows=True
-        ).to(slots.dtype)
-        lane_map_mass = v42.lane_slot_matrix(
-            self.tape_steps, self.lanes, self.cells_per_lane, slots.device, normalize_rows=False
-        ).to(slots.dtype)
+        lane_map_prior = self.lane_map_prior_base.to(dtype=slots.dtype)
+        lane_map_mass = self.lane_map_mass_base.to(dtype=slots.dtype)
         lane_w = torch.softmax(self.class_lane_logits.float(), dim=-1).to(slots.dtype)  # [C,L]
         slot_prior = torch.matmul(lane_w, lane_map_prior).clamp_min(1e-8)  # [C,S]
 
@@ -191,7 +261,7 @@ def route_economy_terms(baux, args) -> Dict[str, torch.Tensor]:
             "sequence_route_delta_mean": z,
         }
     lanes = routes.shape[-1]
-    eye = torch.eye(lanes, device=routes.device, dtype=routes.dtype)
+    eye = _cached_eye(lanes, routes.device, routes.dtype)
     offdiag = routes * (1.0 - eye.view(1, lanes, lanes))
     raw = offdiag.sum(dim=(-2, -1))
     norm = offdiag.sum(dim=-1).mean(dim=-1).clamp(0.0, 1.0)
@@ -223,7 +293,7 @@ def _route_extra_terms_from_routes(routes: torch.Tensor, lanes: int) -> Dict[str
             "self_route_by_step": torch.empty(0, device=z.device),
             "useful_transition_by_step": torch.empty(0, device=z.device),
         }
-    eye = torch.eye(routes.shape[-1], dtype=routes.dtype, device=routes.device)
+    eye = _cached_eye(routes.shape[-1], routes.device, routes.dtype)
     self_by_step = (routes * eye.view(1, routes.shape[-1], routes.shape[-1])).sum(dim=(-2, -1)) / float(max(1, lanes))
     useful_parts = []
     if lanes >= 2:
@@ -257,7 +327,14 @@ def detail_attention_mass(haux: Dict[str, torch.Tensor], args) -> torch.Tensor:
     attn = haux["class_slot_attention"].float()
     if attn.numel() == 0:
         return torch.zeros((), device=attn.device)
-    lane_map_mass = v42.lane_slot_matrix(args.tape_steps, args.lanes, args.cells_per_lane, attn.device, normalize_rows=False).float()
+    lane_map_mass = _cached_lane_slot_matrix(
+        args.tape_steps,
+        args.lanes,
+        args.cells_per_lane,
+        attn.device,
+        torch.float32,
+        normalize_rows=False,
+    )
     detail_lane = 0
     detail_mask = lane_map_mass[detail_lane].view(1, 1, -1)
     return (attn * detail_mask).sum(dim=-1).mean()
@@ -355,9 +432,13 @@ def train_epoch(model, loader, opt, scaler, device, dtype, args, epoch: int):
     use_amp = device.startswith("cuda") and dtype != torch.float32
     totals = {"loss": 0.0, "ce": 0.0, "correct": 0, "n": 0}
     aux_sum: Dict[str, float] = {}
+    _sync_if_cuda(device)
+    t0 = time.perf_counter()
+    batches = 0
     for step, (wav, y) in enumerate(loader, 1):
         if args.max_train_batches and step > args.max_train_batches:
             break
+        batches += 1
         wav = wav.to(device, non_blocking=True)
         y = y.to(device, non_blocking=True)
         opt.zero_grad(set_to_none=True)
@@ -412,6 +493,11 @@ def train_epoch(model, loader, opt, scaler, device, dtype, args, epoch: int):
     out["acc"] = totals["correct"] / max(1, totals["n"])
     for k, v in aux_sum.items():
         out[k] = v / max(1, totals["n"])
+    _sync_if_cuda(device)
+    elapsed = max(1e-9, time.perf_counter() - t0)
+    out["train_seconds"] = elapsed
+    out["train_batches_per_sec"] = batches / elapsed
+    out["train_samples_per_sec"] = totals["n"] / elapsed
     return out
 
 
@@ -436,6 +522,100 @@ def _detail_topread_share(top_reads: Sequence[Sequence[Dict]]) -> float:
     return detail / max(total, 1e-8)
 
 
+def _slot_top_reads(attn: torch.Tensor, slot_names: Sequence[str], k: int = 5):
+    top_reads = []
+    for ci in range(attn.shape[0]):
+        vals, idxs = torch.topk(attn[ci], k=min(k, attn.shape[1]))
+        top_reads.append([{"slot": slot_names[int(j)], "weight": float(v)} for v, j in zip(vals.tolist(), idxs.tolist())])
+    return top_reads
+
+
+@torch.no_grad()
+def evaluate_v43(model, loader, device, dtype, args):
+    model.eval()
+    use_amp = device.startswith("cuda") and dtype != torch.float32
+    total_loss, correct, n = 0.0, 0, 0
+    conf = torch.zeros(args.num_classes, args.num_classes, dtype=torch.long)
+    last_report = None
+    try:
+        loader_len = len(loader)
+    except TypeError:
+        loader_len = 0
+    max_steps = int(args.max_val_batches) if int(args.max_val_batches) > 0 else loader_len
+    if loader_len:
+        max_steps = min(max_steps, loader_len) if max_steps else loader_len
+    _sync_if_cuda(device)
+    t0 = time.perf_counter()
+    batches = 0
+    for step, (wav, y) in enumerate(loader, 1):
+        if args.max_val_batches and step > args.max_val_batches:
+            break
+        batches += 1
+        wav = wav.to(device, non_blocking=True)
+        y = y.to(device, non_blocking=True)
+        with torch.autocast(device_type=device.split(":")[0], dtype=dtype, enabled=use_amp):
+            logits, baux, haux = model(wav)
+            loss = F.cross_entropy(logits.float(), y)
+        pred = logits.argmax(-1)
+        bs = y.numel()
+        total_loss += float(loss.detach().cpu()) * bs
+        correct += int((pred == y).sum().detach().cpu())
+        n += bs
+        conf += torch.bincount(
+            (y.cpu() * args.num_classes + pred.cpu()),
+            minlength=args.num_classes ** 2,
+        ).view(args.num_classes, args.num_classes)
+
+        should_report = (max_steps > 0 and step == max_steps) or (not max_steps)
+        if should_report:
+            attn = haux["class_slot_attention"].float().mean(dim=0).cpu()
+            lane_mass = haux["class_lane_mass"].float().mean(dim=0).cpu()
+            gates = baux.write_gates.float().mean(dim=(0, 3)).cpu() if baux.write_gates.numel() else torch.empty(0)
+            updates = baux.update_norms.float().mean(dim=(0, 3)).cpu() if baux.update_norms.numel() else torch.empty(0)
+            read_group = baux.read_group_mass.float().cpu() if baux.read_group_mass.numel() else torch.empty(0)
+            primitive_weights = baux.primitive_weights.float().cpu() if baux.primitive_weights.numel() else torch.empty(0)
+            top_reads = _slot_top_reads(attn, baux.slot_names)
+            last_report = {
+                "lane_names": [lane_name(i) for i in range(args.lanes)],
+                "read_group_names": [read_group_name(i) for i in range(args.lanes + 1)],
+                "primitive_names": list(PRIMITIVES),
+                "lane_init_norm": _to_float_list(baux.lane_init_norm),
+                "step_alive": _to_float_list(baux.step_alive),
+                "boundary": _to_float_list(baux.boundaries),
+                "route_matrix": _to_float_list(baux.routes),
+                "route_entropy": _to_float_list(baux.route_entropy),
+                "read_group_mass": _to_float_list(read_group),
+                "primitive_weights": _to_float_list(primitive_weights),
+                "write_gate_by_step_lane": _to_float_list(gates),
+                "update_norm_by_step_lane": _to_float_list(updates),
+                "late_input_read_mass": float(baux.late_input_read_mass.detach().float().cpu()),
+                "class_top_reads": top_reads,
+                "class_lane_mass": [
+                    {lane_name(li): float(lane_mass[ci, li]) for li in range(lane_mass.shape[1])}
+                    for ci in range(lane_mass.shape[0])
+                ],
+                "lane_mass_mean": {
+                    lane_name(li): float(lane_mass[:, li].mean())
+                    for li in range(lane_mass.shape[1])
+                },
+                "pair_update_norm": float(haux["pair_update_norm"].detach().cpu()),
+                "class_write": float(haux["class_write"].detach().cpu()),
+                "slot_count": len(baux.slot_names),
+            }
+    _sync_if_cuda(device)
+    elapsed = max(1e-9, time.perf_counter() - t0)
+    return {
+        "loss": total_loss / max(1, n),
+        "acc": correct / max(1, n),
+        "n": n,
+        "confusion": conf.tolist(),
+        "report": last_report,
+        "eval_seconds": elapsed,
+        "eval_batches_per_sec": batches / elapsed,
+        "eval_samples_per_sec": n / elapsed,
+    }
+
+
 def build_trace_feedback(rep: Dict, args, epoch: int) -> Dict:
     routes = _tensor_from_list(rep.get("route_matrix", []))
     boundary = _tensor_from_list(rep.get("boundary", []))
@@ -447,7 +627,7 @@ def build_trace_feedback(rep: Dict, args, epoch: int) -> Dict:
     mem_lane = min(lanes - 1, 3)
 
     if routes.numel():
-        eye = torch.eye(routes.shape[-1], dtype=routes.dtype)
+        eye = _cached_eye(routes.shape[-1], routes.device, routes.dtype)
         offdiag = routes * (1.0 - eye.view(1, routes.shape[-1], routes.shape[-1]))
         offdiag_raw = offdiag.sum(dim=(-2, -1))
         offdiag_norm = offdiag.sum(dim=-1).mean(dim=-1).clamp(0.0, 1.0)
@@ -853,6 +1033,8 @@ def run(args) -> None:
         "skip_gate_mean", "skip_cost", "update_collapse_proxy", "residual_dominance_proxy", "operator_complexity_cost",
         "sequence_nonflat_score", "sequence_route_delta_mean", "sequence_primitive_delta_mean", "sequence_read_delta_mean",
         "logit_norm", "pair_update_norm",
+        "train_seconds", "train_batches_per_sec", "train_samples_per_sec",
+        "eval_seconds", "eval_batches_per_sec", "eval_samples_per_sec",
     ]
     with (out_dir / "metrics.csv").open("w", newline="", encoding="utf-8") as f:
         csv.DictWriter(f, fieldnames=fields).writeheader()
@@ -863,7 +1045,7 @@ def run(args) -> None:
     last_candidates: Dict = {}
     for epoch in range(1, args.epochs + 1):
         tr = train_epoch(model, train_loader, opt, scaler, device, dtype, args, epoch)
-        va = v42.evaluate(model, val_loader, device, dtype, args)
+        va = evaluate_v43(model, val_loader, device, dtype, args)
         if va["acc"] > best:
             best, best_epoch = va["acc"], epoch
             if not args.no_save_checkpoints:
@@ -886,6 +1068,9 @@ def run(args) -> None:
             "val_loss": va["loss"],
             "val_acc": va["acc"],
             "best_acc": best,
+            "eval_seconds": va.get("eval_seconds", 0.0),
+            "eval_batches_per_sec": va.get("eval_batches_per_sec", 0.0),
+            "eval_samples_per_sec": va.get("eval_samples_per_sec", 0.0),
         })
         for k in fields:
             if k in tr:
@@ -918,6 +1103,15 @@ def run(args) -> None:
             f"boundary_peaks={trace.get('route', {}).get('boundary_peak_count', 0)}",
             flush=True,
         )
+        if args.profile_speed:
+            print(
+                f"[speed] epoch {epoch:03d} "
+                f"train={tr.get('train_samples_per_sec', 0.0):.1f} samples/s "
+                f"({tr.get('train_batches_per_sec', 0.0):.2f} batches/s, {tr.get('train_seconds', 0.0):.2f}s) "
+                f"eval={va.get('eval_samples_per_sec', 0.0):.1f} samples/s "
+                f"({va.get('eval_batches_per_sec', 0.0):.2f} batches/s, {va.get('eval_seconds', 0.0):.2f}s)",
+                flush=True,
+            )
 
     v42.write_json(out_dir / "final_report.json", {
         "version": "v4.3_min_heart_canonical",
@@ -950,6 +1144,7 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--heart-window-type", choices=["epoch"], default="epoch")
     p.add_argument("--enable-candidate-suggestions", action="store_true", default=True)
     p.add_argument("--enable-counterfactual-screen", action="store_true", default=False)
+    p.add_argument("--profile-speed", action="store_true", default=False)
     p.add_argument("--compare-to", default="v4.2_fixed_guided same seed/config or baseline_missing")
     return p
 

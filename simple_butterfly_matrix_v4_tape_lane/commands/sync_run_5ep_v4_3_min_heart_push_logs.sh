@@ -20,8 +20,13 @@ DEVICE="${DEVICE:-cuda}"
 LOG_EVERY="${LOG_EVERY:-100}"
 MAX_TRAIN_BATCHES="${MAX_TRAIN_BATCHES:-0}"
 MAX_VAL_BATCHES="${MAX_VAL_BATCHES:-0}"
+PROFILE_SPEED="${PROFILE_SPEED:-0}"
 COMPARE_TO="${COMPARE_TO:-v4.3_audit_fixed same seed/config or baseline_missing}"
 MAIN_FILE="simple_butterfly_matrix_v4_tape_lane/tape_lane_transport_v4_3_min_heart.py"
+PROFILE_ARGS=()
+if [ "$PROFILE_SPEED" != "0" ] && [ "$PROFILE_SPEED" != "false" ] && [ "$PROFILE_SPEED" != "False" ]; then
+  PROFILE_ARGS+=(--profile-speed)
+fi
 
 echo "[v4.3 sync] validate"
 bash simple_butterfly_matrix_v4_tape_lane/commands/validate_v4_3_min_heart.sh
@@ -30,7 +35,7 @@ echo "[v4.3 sync] gradient sanity"
 OUT="$REPORT_DIR/grad_sanity.json" bash simple_butterfly_matrix_v4_tape_lane/commands/grad_sanity_v4_3_min_heart.sh | tee "$REPORT_DIR/grad_sanity.log"
 
 echo "[v4.3 sync] run canonical main -> $REPORT_DIR"
-echo "[v4.3 sync] speed cfg: batch=$BATCH_SIZE eval_batch=$EVAL_BATCH_SIZE workers=$WORKERS log_every=$LOG_EVERY max_train_batches=$MAX_TRAIN_BATCHES max_val_batches=$MAX_VAL_BATCHES" | tee "$REPORT_DIR/speed_config.txt"
+echo "[v4.3 sync] speed cfg: batch=$BATCH_SIZE eval_batch=$EVAL_BATCH_SIZE workers=$WORKERS log_every=$LOG_EVERY max_train_batches=$MAX_TRAIN_BATCHES max_val_batches=$MAX_VAL_BATCHES profile_speed=$PROFILE_SPEED" | tee "$REPORT_DIR/speed_config.txt"
 set +e
 python "$MAIN_FILE" \
   --data-root "$DATA_ROOT" \
@@ -76,6 +81,7 @@ python "$MAIN_FILE" \
   --late-input-start "${LATE_INPUT_START:-0.45}" \
   --late-input-tau "${LATE_INPUT_TAU:-0.12}" \
   --max-candidates-per-epoch "${MAX_CANDIDATES_PER_EPOCH:-8}" \
+  "${PROFILE_ARGS[@]}" \
   --compare-to "$COMPARE_TO" \
   --pin-memory \
   --log-every "$LOG_EVERY" \
@@ -122,6 +128,7 @@ Speed config:
 - log_every: $LOG_EVERY
 - max_train_batches: $MAX_TRAIN_BATCHES
 - max_val_batches: $MAX_VAL_BATCHES
+- profile_speed: $PROFILE_SPEED
 
 Expected artifacts:
 - grad_sanity.json

@@ -75,6 +75,150 @@ controller_logits should decrease actions with bad scout score
 
 This is not full actor/critic yet. It is cheap, local, and supervised by projected counterfactuals.
 
+## Global Alternative Projection Council
+
+The scout should not only test one local edit at a time. The stronger mechanism is a global council that looks at the whole tape once, then builds several cheap alternative programs in projected space.
+
+One global read:
+
+```text
+trace_feedback + metrics + head summary + memory summary + route/primitive/read/boundary summaries
+        ↓
+global_context_encoder
+        ↓
+K alternative projected programs
+```
+
+Each alternative is a small matrix program over `Z[t,lane,d_small]`, not a full D=96/128 execution.
+
+Examples:
+
+```text
+Alternative A: early fork + memory_commit + later memory_recall
+Alternative B: local detail refinement + late head_prepare
+Alternative C: state->abstract split at t=4 + fanout=1/2
+Alternative D: no new boundary, just route specialization + primitive shift
+Alternative E: dormant primitive wake-up test
+```
+
+The council does not need every sub-scout to always propose an alternative. Each scout can abstain.
+
+```text
+boundary_scout: proposes A/B, or abstains
+transition_scout: proposes transition type schedule, or abstains
+primitive_scout: proposes primitive shifts, or abstains
+memory_scout: proposes write/recall, or abstains
+head_scout: proposes anti-shortcut read shift, or abstains
+exploration_scout: occasionally wakes dormant components
+```
+
+The council then chooses a small diverse pool:
+
+```text
+K_total = 4..8 alternatives
+K_verify = 1..2 top alternatives
+```
+
+## Alternative diversity rule
+
+The alternatives must be meaningfully different. Otherwise all scouts collapse to the same safe proposal.
+
+Represent each alternative by an action vector:
+
+```text
+boundary target over T
+transition type over T
+fanout over T
+route basis weights
+primitive bias over T,L,P
+memory write/recall targets
+head read target
+```
+
+Diversity penalty:
+
+```text
+similarity(alt_i, alt_j) too high -> reduce score
+```
+
+At least one alternative per window should come from an underexplored area if available:
+
+```text
+dormant primitive
+unused transition type
+untried boundary region
+low-coverage lane
+memory recall not recently tested
+head non-detail read
+```
+
+## Wake-up / dormant component policy
+
+Some components will not propose alternatives because they are weak, dormant, or currently suppressed. That is normal.
+
+Rules:
+
+```text
+if component has low usage for N windows:
+    occasionally force one projected alternative
+    keep action small
+    mark as exploration
+    do not auto-deploy without verification
+
+if component repeatedly loses:
+    cooldown
+
+if component wins projected score and later verified score:
+    increase its proposal quota
+```
+
+This creates a controlled reserve of mini-models/scouts rather than a chaotic swarm.
+
+## Council controller
+
+The council itself is a small controller/MLP over global context and scout features.
+
+Inputs:
+
+```text
+program quality metrics
+collapse flags
+class margin/confusion
+route entropy / allowed mass
+primitive entropy / dominant primitive
+boundary dead/exploit status
+memory write/read alignment
+head shortcut score
+recent action history
+coverage map
+```
+
+Outputs:
+
+```text
+which scouts are allowed to propose
+how many alternatives to sample
+which alternatives enter the diverse pool
+whether to run verification
+which weak component gets wake-up budget
+```
+
+At first, this controller can be rule-based. Later it becomes trainable from verification records.
+
+## Global council flow
+
+```text
+1. Read whole trace once.
+2. Build shared global context embedding.
+3. Build K candidate projected programs.
+4. Simulate each in low dimension.
+5. Score by task proxy + PQS + diversity - complexity.
+6. Select top diverse alternatives.
+7. Write scout_targets_epoch_N.json.
+8. Optionally verify top-1/top-2 with real forward-only microbatch.
+9. Store accepted/rejected/uncertain records.
+```
+
 ## What the scout sees
 
 Every scout candidate gets context:
@@ -91,6 +235,20 @@ head attention summary
 class margin/confusion summary
 sequence delta before/after
 collapse flags
+```
+
+Global council also sees whole-tape context:
+
+```text
+boundary_by_step
+sequence_change_by_step
+route_by_step
+primitive_by_step_lane
+read_group_by_step
+memory write/read by step
+head lane/cell attention
+recent action history
+coverage map
 ```
 
 It must be causal for forward choices:
@@ -120,7 +278,7 @@ PQS =
 Candidate gain:
 
 ```text
-gain = delta_task_proxy + lambda_pqs * delta_PQS - lambda_cost * action_cost
+gain = delta_task_proxy + lambda_pqs * delta_PQS - lambda_cost * action_cost - lambda_similarity * duplicate_penalty
 ```
 
 ## Minimal MVP stages
@@ -173,7 +331,7 @@ state->abstract
 state->memory
 memory->state
 fork
-tjoin
+join
 head_prepare
 fanout 1/2/3/all
 ```
@@ -220,9 +378,40 @@ memory_recall_target[t]
 route_memory_to_state_target[t]
 ```
 
-### MVP 5: Real Microbatch Verification
+### MVP 5: Global Alternative Council
 
-For top-1 or top-2 scout actions only:
+This is the user's central mechanism.
+
+One pass over whole trace produces 4-8 alternative projected programs.
+
+Output:
+
+```json
+{
+  "epoch": 7,
+  "global_context": {...},
+  "alternatives": [
+    {
+      "id": "alt_boundary_fork_memory",
+      "source_scouts": ["boundary", "transition", "memory"],
+      "boundary_target": [0,0,1,0,0,1,0,0,1,0,0,0],
+      "transition_targets": {"2":"fork", "5":"split", "8":"memory_recall"},
+      "fanout_targets": {"2":"two", "5":"one", "8":"one"},
+      "predicted_gain": 0.018,
+      "diversity_score": 0.74,
+      "risk": "medium",
+      "deploy": false
+    }
+  ],
+  "selected_targets": {...}
+}
+```
+
+No runtime mutation first. Report-only.
+
+### MVP 6: Real Microbatch Verification
+
+For top-1 or top-2 council alternatives only:
 
 - copy current model state;
 - apply temporary bias/action;
@@ -242,6 +431,9 @@ This creates experience records for future critic.
 5. Verify only top-1/top-2.
 6. Store action history: tested, accepted, rejected, uncertain, cooldown.
 7. Do not enable actor/critic until at least a few hundred verified records exist.
+8. Alternatives must be diverse; do not allow 8 copies of the same action.
+9. Scouts can abstain; only exploration scout can force wake-up.
+10. Wake-up alternatives are small and must be marked exploration.
 
 ## Why this helps gradient
 
@@ -255,6 +447,12 @@ Projection Scout:
 
 ```text
 trace -> low-dim candidate simulation -> target for controller logits
+```
+
+Global Alternative Council:
+
+```text
+trace -> several whole-program alternatives -> diverse target pool -> weak controllers receive useful exploratory signal
 ```
 
 So weak choices receive signal before they are frequently used.
@@ -280,7 +478,7 @@ Projection Scout sits above them:
 ```text
 trace_feedback_epoch_N.json
         ↓
-ProjectionScout
+ProjectionScout / GlobalAlternativeCouncil
         ↓
 scout_targets_epoch_N.json
         ↓

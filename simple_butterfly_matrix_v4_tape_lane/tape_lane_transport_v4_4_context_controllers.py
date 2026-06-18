@@ -16,6 +16,10 @@ No Actor/Critic, no EditorLoop deploy, no MatrixMemory, no FeedbackBias auto-dep
 Important: this is a bridge implementation. It covers read/route/boundary/write/alive
 controllers through the existing wrapper. A full primitive_controller inside the
 transform unit is the next code step after this bridge smoke passes.
+
+The old wrapper also contains a broken experimental fast-loader override that looks for
+SpeechCommandsBalanced in v4.2. This bridge disables only that one monkey-patch at runtime
+and keeps the rest of the controller wrapper intact.
 """
 
 from __future__ import annotations
@@ -23,6 +27,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 
@@ -79,6 +84,28 @@ def _translate_args(argv: list[str]) -> tuple[list[str], dict[str, str]]:
     return out, env
 
 
+def _patched_wrapper_copy(wrapper: Path) -> Path:
+    """Create a temporary wrapper with the broken fast-loader monkey-patch disabled.
+
+    We only remove this line:
+        base.v42.make_loaders = make_loaders_fast
+
+    Keeping base v4.3/v4.2 make_loaders avoids the SpeechCommandsBalanced AttributeError,
+    while preserving context-controller backbone/eval/train/report monkey-patches.
+    """
+    text = wrapper.read_text(encoding="utf-8")
+    bad = "base.v42.make_loaders = make_loaders_fast"
+    if bad in text:
+        text = text.replace(bad, "# disabled by v4.4 bridge: " + bad)
+    else:
+        print("[v4.4] warning: fast-loader monkey-patch line not found; wrapper unchanged", file=sys.stderr)
+    tmp = tempfile.NamedTemporaryFile("w", encoding="utf-8", prefix="v44_context_wrapper_", suffix=".sh", delete=False)
+    with tmp:
+        tmp.write(text)
+    os.chmod(tmp.name, 0o755)
+    return Path(tmp.name)
+
+
 def main(argv: list[str] | None = None) -> int:
     if argv is None:
         argv = sys.argv[1:]
@@ -90,14 +117,16 @@ def main(argv: list[str] | None = None) -> int:
         print("[v4.4] expected path is <repo>/simple_butterfly_matrix_v4_tape_lane/commands/run_v4_3_context_controller.sh", file=sys.stderr)
         return 2
 
+    patched_wrapper = _patched_wrapper_copy(wrapper)
     forwarded, env = _translate_args(argv)
     print(
-        "[v4.4] bridge entrypoint -> simple_butterfly_matrix_v4_tape_lane/commands/run_v4_3_context_controller.sh "
+        "[v4.4] bridge entrypoint -> patched run_v4_3_context_controller.sh "
         f"CONTEXT_CONTROLLER_SCALE={env.get('CONTEXT_CONTROLLER_SCALE')} "
-        f"alpha_min={env.get('V44_CONTEXT_ALPHA_MIN')} alpha_max={env.get('V44_CONTEXT_ALPHA_MAX')}",
+        f"alpha_min={env.get('V44_CONTEXT_ALPHA_MIN')} alpha_max={env.get('V44_CONTEXT_ALPHA_MAX')} "
+        "fast_loader_override=disabled",
         flush=True,
     )
-    cmd = ["bash", str(wrapper), *forwarded]
+    cmd = ["bash", str(patched_wrapper), *forwarded]
     return subprocess.call(cmd, cwd=str(repo), env=env)
 
 

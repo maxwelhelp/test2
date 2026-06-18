@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """v4.4 context-controller entrypoint.
 
-This file is the missing Python runtime for the v4.4 controller experiment.
+This file is the Python runtime for the v4.4 controller experiment.
 It intentionally reuses the already-implemented v4.3 context-controller launcher logic
 instead of duplicating a large backbone patch here.
 
@@ -12,6 +12,10 @@ This entrypoint keeps v4.3 canonical main intact and provides a real file for:
     commands/sync_run_5ep_v4_4_context_controllers_push_logs_v2.sh
 
 No Actor/Critic, no EditorLoop deploy, no MatrixMemory, no FeedbackBias auto-deploy.
+
+Important: this is a bridge implementation. It covers read/route/boundary/write/alive
+controllers through the existing wrapper. A full primitive_controller inside the
+transform unit is the next code step after this bridge smoke passes.
 """
 
 from __future__ import annotations
@@ -22,7 +26,11 @@ import sys
 from pathlib import Path
 
 
+PROJECT_DIR = "simple_butterfly_matrix_v4_tape_lane"
+
+
 def _repo_root() -> Path:
+    # file = <repo>/simple_butterfly_matrix_v4_tape_lane/tape_lane_transport_v4_4_context_controllers.py
     return Path(__file__).resolve().parents[1]
 
 
@@ -76,20 +84,21 @@ def main(argv: list[str] | None = None) -> int:
         argv = sys.argv[1:]
 
     repo = _repo_root()
-    wrapper = repo / "commands" / "run_v4_3_context_controller.sh"
+    wrapper = repo / PROJECT_DIR / "commands" / "run_v4_3_context_controller.sh"
     if not wrapper.exists():
         print(f"[v4.4] ERROR: missing existing context wrapper: {wrapper}", file=sys.stderr)
+        print("[v4.4] expected path is <repo>/simple_butterfly_matrix_v4_tape_lane/commands/run_v4_3_context_controller.sh", file=sys.stderr)
         return 2
 
     forwarded, env = _translate_args(argv)
     print(
-        "[v4.4] bridge entrypoint -> run_v4_3_context_controller.sh "
+        "[v4.4] bridge entrypoint -> simple_butterfly_matrix_v4_tape_lane/commands/run_v4_3_context_controller.sh "
         f"CONTEXT_CONTROLLER_SCALE={env.get('CONTEXT_CONTROLLER_SCALE')} "
         f"alpha_min={env.get('V44_CONTEXT_ALPHA_MIN')} alpha_max={env.get('V44_CONTEXT_ALPHA_MAX')}",
         flush=True,
     )
     cmd = ["bash", str(wrapper), *forwarded]
-    return subprocess.call(cmd, cwd=str(repo.parents[0]), env=env)
+    return subprocess.call(cmd, cwd=str(repo), env=env)
 
 
 if __name__ == "__main__":

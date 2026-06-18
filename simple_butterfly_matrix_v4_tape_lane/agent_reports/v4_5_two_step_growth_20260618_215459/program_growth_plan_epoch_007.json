@@ -1,0 +1,148 @@
+{
+  "epoch": 7,
+  "growth_proposals": [
+    {
+      "action": "insert_after",
+      "evidence": {
+        "signals": {
+          "boundary": 0.10708300769329071,
+          "detail_topread_share": 0.9281737734765392,
+          "future_read": 0.0,
+          "input_side_bad": 0.05061951458454132,
+          "memory_write": 0.0,
+          "output_side_bad": 0.0,
+          "primitive_delta": 0.02938048541545868,
+          "read_delta": 0.0,
+          "route_delta": 0.0,
+          "sequence_change": 0.1720370054244995,
+          "update_delta": 0.0,
+          "useful_transition": 0.06847938150167465
+        },
+        "t": 0,
+        "weakness_score": 0.23876
+      },
+      "new_T": 3,
+      "position": 0,
+      "reason": "input-side step has weak read/update/primitive movement; insert local evidence refine after input step",
+      "stage_type": "input_evidence_refine",
+      "target_effect": {
+        "boundary": "only if after-context changes",
+        "primitive": [
+          "diff",
+          "gated_contrast",
+          "ctx_matrix"
+        ],
+        "route": [
+          "detail->state"
+        ]
+      }
+    },
+    {
+      "action": "insert_before",
+      "evidence": {
+        "signals": {
+          "boundary": 0.11060406267642975,
+          "detail_topread_share": 0.9281737734765392,
+          "future_read": 0.0,
+          "input_side_bad": 0.0,
+          "memory_write": 0.0,
+          "output_side_bad": 0.0,
+          "primitive_delta": 0.0,
+          "read_delta": 0.0,
+          "route_delta": 0.0,
+          "sequence_change": 0.0,
+          "update_delta": 0.0,
+          "useful_transition": 0.048317812383174896
+        },
+        "t": 1,
+        "weakness_score": 0.086019
+      },
+      "new_T": 3,
+      "position": 1,
+      "reason": "step has high weakness score; model a new transform/route refine stage on the side with weaker context",
+      "stage_type": "local_transform_route_refine",
+      "target_effect": {
+        "boundary": "sparse peak only if projected after-context improves",
+        "primitive": [
+          "diff",
+          "ctx_matrix",
+          "gated_contrast"
+        ],
+        "route": [
+          "detail->state",
+          "state->abstract"
+        ]
+      }
+    },
+    {
+      "action": "keep_T_strengthen_current_choices",
+      "new_T": 2,
+      "position": 1,
+      "reason": "growth is optional; first compare to strengthening current read/route/primitive choices without adding exact depth",
+      "stage_type": "no_growth_baseline",
+      "target_effect": {
+        "boundary": "no new boundary required",
+        "primitive": [
+          "context-selected mixture"
+        ],
+        "route": [
+          "allowed edges only"
+        ]
+      }
+    }
+  ],
+  "mode": "report_only_growth_decision",
+  "recommended_next_command_hint": "rerun with TAPE_STEPS=new_T from top proposal; do not push checkpoints",
+  "report_dir": "/home/maxwelhelp/test/sience/experiments/math_search/WORKING_BEST/test2_projection_scout/simple_butterfly_matrix_v4_tape_lane/agent_reports/v4_5_two_step_growth_20260618_215459",
+  "scores": {
+    "T": 2,
+    "last_step": 1,
+    "step_scores": [
+      {
+        "signals": {
+          "boundary": 0.10708300769329071,
+          "detail_topread_share": 0.9281737734765392,
+          "future_read": 0.0,
+          "input_side_bad": 0.05061951458454132,
+          "memory_write": 0.0,
+          "output_side_bad": 0.0,
+          "primitive_delta": 0.02938048541545868,
+          "read_delta": 0.0,
+          "route_delta": 0.0,
+          "sequence_change": 0.1720370054244995,
+          "update_delta": 0.0,
+          "useful_transition": 0.06847938150167465
+        },
+        "t": 0,
+        "weakness_score": 0.23876
+      },
+      {
+        "signals": {
+          "boundary": 0.11060406267642975,
+          "detail_topread_share": 0.9281737734765392,
+          "future_read": 0.0,
+          "input_side_bad": 0.0,
+          "memory_write": 0.0,
+          "output_side_bad": 0.0,
+          "primitive_delta": 0.0,
+          "read_delta": 0.0,
+          "route_delta": 0.0,
+          "sequence_change": 0.0,
+          "update_delta": 0.0,
+          "useful_transition": 0.048317812383174896
+        },
+        "t": 1,
+        "weakness_score": 0.086019
+      }
+    ],
+    "task_mode": "unknown"
+  },
+  "version": "program_growth_planner_v1_two_step_compatible",
+  "weak_prior_policy": {
+    "first_step": "weak input/evidence prior only, not fixed",
+    "last_step": "weak output/summary prior only for classification, not fixed",
+    "middle_steps": "created only when weakness/projection says depth is useful",
+    "note": "for another task/head, task_mode can change; growth is decided by trace weakness not hard-coded stage names",
+    "seed_steps": "2 by default"
+  }
+}

@@ -1,0 +1,85 @@
+{
+  "epoch": 3,
+  "window": {
+    "type": "epoch",
+    "index": 3
+  },
+  "version": "v4.3_min_heart_canonical",
+  "candidates": [
+    {
+      "source": "boundary_specialization_rule",
+      "target_type": "boundary",
+      "location": {
+        "t": "all"
+      },
+      "action": "increase",
+      "target": "boundary_peak_contrast",
+      "reason": "boundary is flat or has no hard peaks; program stages are not separated",
+      "evidence_metrics": {
+        "boundary_peak_count": 0,
+        "boundary_soft_peak_count": 0.07837691903114319,
+        "boundary_flatness": 8.561462163925171e-05
+      },
+      "risk": "medium",
+      "delta_scale": 0.03,
+      "deploy": false
+    },
+    {
+      "source": "sequence_boundary_rule",
+      "target_type": "boundary",
+      "location": {
+        "t": 0
+      },
+      "action": "increase",
+      "target": "boundary",
+      "reason": "sequence changes here but boundary is low",
+      "evidence_metrics": {
+        "boundary": 0.22210969030857086,
+        "sequence_change": 0.05803956836462021
+      },
+      "risk": "medium",
+      "delta_scale": 0.03,
+      "deploy": false
+    },
+    {
+      "source": "memory_consumer_rule",
+      "target_type": "route",
+      "location": {
+        "from_lane": "memory",
+        "to_lane": "state"
+      },
+      "action": "increase",
+      "target": "route.memory->state",
+      "reason": "memory appears useful; future Heart should test memory->state route rather than killing memory",
+      "evidence_metrics": {
+        "memory_write": 0.4263189435005188,
+        "memory_consumer_proxy": 0.4664820432662964
+      },
+      "risk": "low",
+      "delta_scale": 0.03,
+      "deploy": false
+    }
+  ],
+  "diversity": {
+    "by_source": {
+      "boundary_specialization_rule": 1,
+      "sequence_boundary_rule": 1,
+      "memory_consumer_rule": 1
+    },
+    "by_target_type": {
+      "boundary": 2,
+      "route": 1
+    },
+    "by_step": {
+      "all": 1,
+      "0": 1
+    },
+    "by_lane": {},
+    "selected_candidates": 3,
+    "attempted_candidates": 3,
+    "skipped_duplicates": 0,
+    "duplicate_rate": 0.0,
+    "max_candidates_effective": 8,
+    "attempted_after_filter": 3
+  }
+}

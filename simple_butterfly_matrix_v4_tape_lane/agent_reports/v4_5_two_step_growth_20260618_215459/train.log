@@ -1,0 +1,17 @@
+[v4.4] bridge entrypoint -> patched run_v4_3_context_controller.sh CONTEXT_CONTROLLER_SCALE=0.055 PRIMITIVE_CONTROLLER_SCALE=0.055 TRANSITION_CONTROLLER_SCALE=0.055 FANOUT_CONTROLLER_SCALE=0.055 BOUNDARY_CONTROLLER_SCALE=0.055 BOUNDARY_MEAN_TARGET=0.28 BOUNDARY_ROUTE_GATE_SCALE=0.25 ALIVE_CONTROLLER_SCALE=0.0 alpha_min=0.01 alpha_max=0.1 fast_loader_override=disabled sequence_terms_compat=enabled primitive_controller=enabled transition_controller=enabled fanout_controller=enabled boundary_mean_budget=enabled
+loaded datasets: train=12000 val=2000 classes=['yes', 'no', 'up', 'down', 'left', 'right', 'on', 'off', 'stop', 'go']
+TapeLaneRouter v4.3_min_heart params=837841 T=2 lanes=4 cells=10 D=96 pairs=4 device=cuda amp=fp16
+epoch 001/7 train=2.2621/15.82% val=2.1464/18.75% best=18.75%@1 seq=0.0102 boundary_peaks=0
+[speed] epoch 001 train=0.0 samples/s (0.00 batches/s, 0.00s) eval=749.6 samples/s (1.50 batches/s, 2.67s)
+epoch 002/7 train=2.1091/22.75% val=2.0140/26.30% best=26.30%@2 seq=0.0221 boundary_peaks=0
+[speed] epoch 002 train=0.0 samples/s (0.00 batches/s, 0.00s) eval=784.7 samples/s (1.57 batches/s, 2.55s)
+epoch 003/7 train=1.9976/27.50% val=1.8838/30.55% best=30.55%@3 seq=0.0290 boundary_peaks=0
+[speed] epoch 003 train=0.0 samples/s (0.00 batches/s, 0.00s) eval=791.8 samples/s (1.58 batches/s, 2.53s)
+epoch 004/7 train=1.9055/31.23% val=1.7957/33.75% best=33.75%@4 seq=0.0345 boundary_peaks=0
+[speed] epoch 004 train=0.0 samples/s (0.00 batches/s, 0.00s) eval=789.6 samples/s (1.58 batches/s, 2.53s)
+epoch 005/7 train=1.8044/35.50% val=1.7333/36.75% best=36.75%@5 seq=0.0461 boundary_peaks=0
+[speed] epoch 005 train=0.0 samples/s (0.00 batches/s, 0.00s) eval=775.9 samples/s (1.55 batches/s, 2.58s)
+epoch 006/7 train=1.6977/39.05% val=1.5749/42.80% best=42.80%@6 seq=0.0668 boundary_peaks=0
+[speed] epoch 006 train=0.0 samples/s (0.00 batches/s, 0.00s) eval=791.2 samples/s (1.58 batches/s, 2.53s)
+epoch 007/7 train=1.6464/40.48% val=1.5086/45.70% best=45.70%@7 seq=0.0860 boundary_peaks=0
+[speed] epoch 007 train=0.0 samples/s (0.00 batches/s, 0.00s) eval=787.6 samples/s (1.58 batches/s, 2.54s)

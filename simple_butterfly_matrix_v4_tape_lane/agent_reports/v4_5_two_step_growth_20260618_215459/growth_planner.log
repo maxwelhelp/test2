@@ -1,0 +1,4 @@
+[growth_planner] wrote /home/maxwelhelp/test/sience/experiments/math_search/WORKING_BEST/test2_projection_scout/simple_butterfly_matrix_v4_tape_lane/agent_reports/v4_5_two_step_growth_20260618_215459/program_growth_plan_epoch_007.json
+  insert_after pos=0 new_T=3 type=input_evidence_refine reason=input-side step has weak read/update/primitive movement; insert local evidence refine after input step
+  insert_before pos=1 new_T=3 type=local_transform_route_refine reason=step has high weakness score; model a new transform/route refine stage on the side with weaker context
+  keep_T_strengthen_current_choices pos=1 new_T=2 type=no_growth_baseline reason=growth is optional; first compare to strengthening current read/route/primitive choices without adding exact depth

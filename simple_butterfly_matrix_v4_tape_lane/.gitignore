@@ -1,0 +1,5 @@
+# keep text logs, ignore model binaries
+runs/**/*.pt
+runs/**/*.pth
+runs/**/*.ckpt
+runs/**/*.safetensors

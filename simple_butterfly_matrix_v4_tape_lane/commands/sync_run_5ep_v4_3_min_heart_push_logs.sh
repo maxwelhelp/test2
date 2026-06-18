@@ -24,9 +24,11 @@ LOG_EVERY="${LOG_EVERY:-100}"
 MAX_TRAIN_BATCHES="${MAX_TRAIN_BATCHES:-0}"
 MAX_VAL_BATCHES="${MAX_VAL_BATCHES:-0}"
 COMPARE_TO="${COMPARE_TO:-v4.3_audit_fixed same seed/config or baseline_missing}"
+MAIN_FILE="simple_butterfly_matrix_v4_tape_lane/tape_lane_transport_v4_3_min_heart.py"
+CANON_FILE="simple_butterfly_matrix_v4_tape_lane/commands/canonicalize_v4_3_main.py"
 
 echo "[v4.3 sync] canonicalize main"
-python simple_butterfly_matrix_v4_tape_lane/commands/canonicalize_v4_3_main.py | tee "$REPORT_DIR/canonicalize.log"
+python "$CANON_FILE" | tee "$REPORT_DIR/canonicalize.log"
 
 echo "[v4.3 sync] validate"
 bash simple_butterfly_matrix_v4_tape_lane/commands/validate_v4_3_min_heart.sh
@@ -37,7 +39,7 @@ OUT="$REPORT_DIR/grad_sanity.json" bash simple_butterfly_matrix_v4_tape_lane/com
 echo "[v4.3 sync] run canonical main -> $REPORT_DIR"
 echo "[v4.3 sync] speed cfg: batch=$BATCH_SIZE eval_batch=$EVAL_BATCH_SIZE workers=$WORKERS log_every=$LOG_EVERY max_train_batches=$MAX_TRAIN_BATCHES max_val_batches=$MAX_VAL_BATCHES" | tee "$REPORT_DIR/speed_config.txt"
 set +e
-python simple_butterfly_matrix_v4_tape_lane/tape_lane_transport_v4_3_min_heart.py \
+python "$MAIN_FILE" \
   --data-root "$DATA_ROOT" \
   --epochs "$EPOCHS" \
   --train-limit "$TRAIN_LIMIT" \
@@ -102,8 +104,8 @@ Command: sync_run_5ep_v4_3_min_heart_push_logs.sh
 Run status: $RUN_STATUS
 
 Canonical main:
-- canonicalizer: simple_butterfly_matrix_v4_tape_lane/commands/canonicalize_v4_3_main.py
-- entrypoint: simple_butterfly_matrix_v4_tape_lane/tape_lane_transport_v4_3_min_heart.py
+- canonicalizer: $CANON_FILE
+- entrypoint: $MAIN_FILE
 - wrapper: not used by standard sync
 - still observer-only: candidate deploy=false, no editor auto-deploy
 
@@ -164,9 +166,9 @@ except Exception as e:
 PY
 fi
 
-echo "[v4.3 sync] git add logs only"
+echo "[v4.3 sync] git add logs and canonical source"
 find "$REPORT_DIR" -maxdepth 1 \( -name '*.json' -o -name '*.csv' -o -name '*.txt' -o -name '*.log' \) -print -exec git add {} +
-git add "$STATUS"
+git add "$STATUS" "$MAIN_FILE" "$CANON_FILE"
 
 echo "[v4.3 sync] ensure no checkpoint files staged"
 if git diff --cached --name-only | grep -E '\.(pt|pth|ckpt|safetensors)$'; then
@@ -175,7 +177,7 @@ if git diff --cached --name-only | grep -E '\.(pt|pth|ckpt|safetensors)$'; then
 fi
 
 if git diff --cached --quiet; then
-  echo "[v4.3 sync] no logs to commit"
+  echo "[v4.3 sync] no logs/source changes to commit"
 else
   git commit -m "Add v4.3 canonical main run logs $TS"
   git push

@@ -1,0 +1,8 @@
+[v4.6 validate] py_compile
+[v4.6 validate] --help smoke
+[v4.6 validate] import smoke
+V46LoopCoreClassifier JointController ParallelPrimitiveSelector MatrixMemory
+[v4.6 validate] banned runtime mechanisms scan
+[v4.6 validate] shell syntax
+[v4.6 validate] checkpoint guard
+[v4.6 validate] OK

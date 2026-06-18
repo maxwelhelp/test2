@@ -1,0 +1,20 @@
+Traceback (most recent call last):
+  File "/home/maxwelhelp/test/sience/experiments/math_search/WORKING_BEST/loop_core_test2/simple_butterfly_matrix_v4_tape_lane/v4_6_loop_core/tape_lane_transport_v4_6_loop_core.py", line 124, in make_loaders
+    return v42.make_loaders(args)
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/maxwelhelp/test/sience/experiments/math_search/WORKING_BEST/loop_core_test2/simple_butterfly_matrix/simple_butterfly_matrix.py", line 162, in make_loaders
+    if args.synthetic:
+       ^^^^^^^^^^^^^^
+AttributeError: 'Namespace' object has no attribute 'synthetic'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/maxwelhelp/test/sience/experiments/math_search/WORKING_BEST/loop_core_test2/simple_butterfly_matrix_v4_tape_lane/v4_6_loop_core/tape_lane_transport_v4_6_loop_core.py", line 555, in <module>
+    run(parser().parse_args())
+  File "/home/maxwelhelp/test/sience/experiments/math_search/WORKING_BEST/loop_core_test2/simple_butterfly_matrix_v4_tape_lane/v4_6_loop_core/tape_lane_transport_v4_6_loop_core.py", line 445, in run
+    train_loader, val_loader, classes, train_counts, val_counts = make_loaders(args)
+                                                                  ^^^^^^^^^^^^^^^^^^
+  File "/home/maxwelhelp/test/sience/experiments/math_search/WORKING_BEST/loop_core_test2/simple_butterfly_matrix_v4_tape_lane/v4_6_loop_core/tape_lane_transport_v4_6_loop_core.py", line 129, in make_loaders
+    raise RuntimeError(
+RuntimeError: failed to build real SpeechCommands loaders. Use --synthetic-data for smoke tests or set DATA_ROOT/--data-root to the real dataset.

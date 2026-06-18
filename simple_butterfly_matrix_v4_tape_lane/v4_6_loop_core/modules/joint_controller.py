@@ -26,7 +26,7 @@ class ControllerOutput:
 
 
 def build_route_prior(lanes: int, *, device=None, dtype=None) -> torch.Tensor:
-    """Only a diagnostic/optional weak prior. Default runtime strength is zero."""
+    """Optional diagnostic weak prior. Default runtime strength is zero."""
     prior = torch.zeros((lanes, lanes), device=device, dtype=dtype or torch.float32)
     if lanes >= 2:
         prior[0, 1] = 0.10
@@ -101,12 +101,14 @@ class JointController(nn.Module):
 
     def reset_parameters(self) -> None:
         nn.init.normal_(self.step_embedding.weight, std=0.02)
-        nn.init.constant_(self.write_head.bias, -0.5)
-        nn.init.constant_(self.fanout_head.bias, -0.2)
-        nn.init.constant_(self.memory_write_head.bias, -0.8)
+        # No fixed operational bias. Start nearly neutral with tiny random offsets
+        # so the input/context can decide instead of hard-coded write/fanout/memory behavior.
+        for head in (self.write_head, self.fanout_head, self.memory_write_head):
+            if head.bias is not None:
+                nn.init.normal_(head.bias, mean=0.0, std=0.03)
         last = self.boundary_head[-1]
-        if isinstance(last, nn.Linear):
-            nn.init.constant_(last.bias, -0.4)
+        if isinstance(last, nn.Linear) and last.bias is not None:
+            nn.init.normal_(last.bias, mean=0.0, std=0.03)
 
     def _step_ids(self, step_index: Union[int, torch.Tensor], batch: int, device: torch.device) -> torch.Tensor:
         if isinstance(step_index, int):

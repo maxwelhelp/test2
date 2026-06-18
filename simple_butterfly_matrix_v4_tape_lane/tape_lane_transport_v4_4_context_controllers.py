@@ -13,7 +13,8 @@ No Actor/Critic, no EditorLoop deploy, no MatrixMemory, no FeedbackBias auto-dep
 Current bridge coverage:
     read/source controller      yes
     route/lane-flow controller  yes
-    boundary controller         yes
+    boundary controller         yes, with separate scale
+    boundary route cheapness    budgeted/capped gate
     write gate controller       yes
     alive controller            present, but disabled by default
     primitive controller        yes, patched around each transform unit
@@ -73,6 +74,9 @@ def _translate_args(argv: list[str]) -> tuple[list[str], dict[str, str]]:
 
     env["CONTEXT_CONTROLLER_SCALE"] = env.get("CONTEXT_CONTROLLER_SCALE", f"{scale:.6g}")
     env["PRIMITIVE_CONTROLLER_SCALE"] = env.get("PRIMITIVE_CONTROLLER_SCALE", env["CONTEXT_CONTROLLER_SCALE"])
+    # Boundary is allowed to decide separators, but cross-lane route must not become free everywhere.
+    env["BOUNDARY_CONTROLLER_SCALE"] = env.get("BOUNDARY_CONTROLLER_SCALE", env["CONTEXT_CONTROLLER_SCALE"])
+    env["BOUNDARY_ROUTE_GATE_SCALE"] = env.get("BOUNDARY_ROUTE_GATE_SCALE", "0.25")
     # Adaptive depth is riskier than read/route/write/primitive. Keep alive context off unless explicitly enabled.
     env["ALIVE_CONTROLLER_SCALE"] = env.get("ALIVE_CONTROLLER_SCALE", "0.0")
     env["V44_CONTEXT_ALPHA_MIN"] = f"{alpha_min:.6g}"
@@ -186,7 +190,7 @@ def _patch_wrapper_text(text: str) -> str:
         else:
             print("[v4.4] warning: ContextTapeLaneRouterBackbone marker not found; primitive controller not injected", file=sys.stderr)
 
-    # 3) Add primitive/alive controller scales and wrap transform units after base init.
+    # 3) Add primitive/alive/boundary controller scales and wrap transform units after base init.
     init_block = (
         '        self.context_controller_scale = float(os.environ.get("CONTEXT_CONTROLLER_SCALE", "0.15"))\n'
         '        self.read_context_net = nn.Sequential(nn.LayerNorm(4 * d), nn.Linear(4 * d, d), nn.SiLU(), nn.Linear(d, r))'
@@ -194,6 +198,8 @@ def _patch_wrapper_text(text: str) -> str:
     init_repl = (
         '        self.context_controller_scale = float(os.environ.get("CONTEXT_CONTROLLER_SCALE", "0.15"))\n'
         '        self.primitive_controller_scale = float(os.environ.get("PRIMITIVE_CONTROLLER_SCALE", str(self.context_controller_scale)))\n'
+        '        self.boundary_controller_scale = float(os.environ.get("BOUNDARY_CONTROLLER_SCALE", str(self.context_controller_scale)))\n'
+        '        self.boundary_route_gate_scale = float(os.environ.get("BOUNDARY_ROUTE_GATE_SCALE", "0.25"))\n'
         '        self.alive_controller_scale = float(os.environ.get("ALIVE_CONTROLLER_SCALE", "0.0"))\n'
         '        self.read_context_net = nn.Sequential(nn.LayerNorm(4 * d), nn.Linear(4 * d, d), nn.SiLU(), nn.Linear(d, r))'
     )
@@ -218,7 +224,21 @@ def _patch_wrapper_text(text: str) -> str:
     if old_alive in text:
         text = text.replace(old_alive, new_alive, 1)
 
-    # 5) Replace primitive call with context-aware primitive call.
+    # 5) Boundary score can be context-aware, but route cheapness is budgeted/capped to prevent BOUNDARY_EXPLOIT.
+    old_boundary = 'boundary = torch.sigmoid(self.boundary_logit[t].to(device=x.device, dtype=x.dtype) + self.context_controller_scale * boundary_bias)  # [B]'
+    new_boundary = 'boundary = torch.sigmoid(self.boundary_logit[t].to(device=x.device, dtype=x.dtype) + self.boundary_controller_scale * boundary_bias)  # [B]'
+    if old_boundary in text:
+        text = text.replace(old_boundary, new_boundary, 1)
+
+    old_route_gate = 'route_logits = route_logits + boundary.view(-1, 1, 1) * self.boundary_route_bias.to(device=x.device, dtype=x.dtype).view(1, self.lanes, self.lanes)'
+    new_route_gate = (
+        'route_boundary_gate = (boundary * self.boundary_route_gate_scale).clamp(0.0, 1.0)\n'
+        '            route_logits = route_logits + route_boundary_gate.view(-1, 1, 1) * self.boundary_route_bias.to(device=x.device, dtype=x.dtype).view(1, self.lanes, self.lanes)'
+    )
+    if old_route_gate in text:
+        text = text.replace(old_route_gate, new_route_gate, 1)
+
+    # 6) Replace primitive call with context-aware primitive call.
     old_unit_call = '            update, unit_info = unit(x, read_packet, self.lane_embed)'
     new_unit_call = (
         '            lane_state_pre = x.mean(dim=2)\n'
@@ -236,18 +256,18 @@ def _patch_wrapper_text(text: str) -> str:
     if old_unit_call in text:
         text = text.replace(old_unit_call, new_unit_call, 1)
 
-    # 6) Add primitive controller status to trace and report.
+    # 7) Add primitive/boundary controller status to trace and report.
     old_trace_ctx = 'trace["collapse_flags"] = flags; trace["version"] = "v4.3_context_controller_audit_fast"; trace["context_controller"] = {"active": True, "scale": float(os.environ.get("CONTEXT_CONTROLLER_SCALE", "0.15"))}'
-    new_trace_ctx = 'trace["collapse_flags"] = flags; trace["version"] = "v4.4_context_controller_primitive_bridge"; trace["context_controller"] = {"active": True, "scale": float(os.environ.get("CONTEXT_CONTROLLER_SCALE", "0.15")), "primitive_controller": True, "primitive_scale": float(os.environ.get("PRIMITIVE_CONTROLLER_SCALE", os.environ.get("CONTEXT_CONTROLLER_SCALE", "0.15"))), "alive_scale": float(os.environ.get("ALIVE_CONTROLLER_SCALE", "0.0"))}'
+    new_trace_ctx = 'trace["collapse_flags"] = flags; trace["version"] = "v4.4_context_controller_primitive_budgeted_boundary_bridge"; trace["context_controller"] = {"active": True, "scale": float(os.environ.get("CONTEXT_CONTROLLER_SCALE", "0.15")), "primitive_controller": True, "primitive_scale": float(os.environ.get("PRIMITIVE_CONTROLLER_SCALE", os.environ.get("CONTEXT_CONTROLLER_SCALE", "0.15"))), "boundary_controller_scale": float(os.environ.get("BOUNDARY_CONTROLLER_SCALE", os.environ.get("CONTEXT_CONTROLLER_SCALE", "0.15"))), "boundary_route_gate_scale": float(os.environ.get("BOUNDARY_ROUTE_GATE_SCALE", "0.25")), "alive_scale": float(os.environ.get("ALIVE_CONTROLLER_SCALE", "0.0"))}'
     if old_trace_ctx in text:
         text = text.replace(old_trace_ctx, new_trace_ctx, 1)
 
     old_report_line = 'f.write("- read/route/boundary/alive/write now receive context projections from current lane state, evidence and memory.\\n"); f.write("- fast eval computes loss/accuracy on all validation batches, but builds heavy trace/report once from last validation batch.\\n")'
-    new_report_line = 'f.write("- read/route/boundary/write receive context projections from current lane state, evidence and memory.\\n"); f.write("- primitive_controller is active inside transform units and biases primitive/operator choice from lane/read/memory/step/route context.\\n"); f.write(f"- alive_controller_scale: {float(os.environ.get(\'ALIVE_CONTROLLER_SCALE\', \'0.0\')):.3f} (0.0 means disabled by default).\\n"); f.write("- fast eval computes loss/accuracy on all validation batches, but builds heavy trace/report once from last validation batch.\\n")'
+    new_report_line = 'f.write("- read/route/boundary/write receive context projections from current lane state, evidence and memory.\\n"); f.write("- primitive_controller is active inside transform units and biases primitive/operator choice from lane/read/memory/step/route context.\\n"); f.write(f"- boundary_controller_scale: {float(os.environ.get(\'BOUNDARY_CONTROLLER_SCALE\', os.environ.get(\'CONTEXT_CONTROLLER_SCALE\', \'0.15\'))):.3f} route_gate_scale={float(os.environ.get(\'BOUNDARY_ROUTE_GATE_SCALE\', \'0.25\')):.3f}.\\n"); f.write(f"- alive_controller_scale: {float(os.environ.get(\'ALIVE_CONTROLLER_SCALE\', \'0.0\')):.3f} (0.0 means disabled by default).\\n"); f.write("- fast eval computes loss/accuracy on all validation batches, but builds heavy trace/report once from last validation batch.\\n")'
     if old_report_line in text:
         text = text.replace(old_report_line, new_report_line, 1)
 
-    # 7) Current aux_losses_v43 expects these keys from base.sequence_terms.
+    # 8) Current aux_losses_v43 expects these keys from base.sequence_terms.
     old_return = (
         '    return {"sequence_route_delta_mean": route_delta, "sequence_primitive_delta_mean": prim_delta, '
         '"sequence_update_delta_mean": trace_delta, "sequence_trace_delta_mean": trace_delta, '
@@ -317,9 +337,11 @@ def main(argv: list[str] | None = None) -> int:
         "[v4.4] bridge entrypoint -> patched run_v4_3_context_controller.sh "
         f"CONTEXT_CONTROLLER_SCALE={env.get('CONTEXT_CONTROLLER_SCALE')} "
         f"PRIMITIVE_CONTROLLER_SCALE={env.get('PRIMITIVE_CONTROLLER_SCALE')} "
+        f"BOUNDARY_CONTROLLER_SCALE={env.get('BOUNDARY_CONTROLLER_SCALE')} "
+        f"BOUNDARY_ROUTE_GATE_SCALE={env.get('BOUNDARY_ROUTE_GATE_SCALE')} "
         f"ALIVE_CONTROLLER_SCALE={env.get('ALIVE_CONTROLLER_SCALE')} "
         f"alpha_min={env.get('V44_CONTEXT_ALPHA_MIN')} alpha_max={env.get('V44_CONTEXT_ALPHA_MAX')} "
-        "fast_loader_override=disabled sequence_terms_compat=enabled primitive_controller=enabled",
+        "fast_loader_override=disabled sequence_terms_compat=enabled primitive_controller=enabled budgeted_boundary_route_gate=enabled",
         flush=True,
     )
     cmd = ["bash", str(patched_wrapper), *forwarded]

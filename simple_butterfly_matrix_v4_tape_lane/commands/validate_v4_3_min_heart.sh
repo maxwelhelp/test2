@@ -34,6 +34,6 @@ fi
 echo "[validate v4.3] sync script presence/correct target"
 test -f "$SYNC"
 grep -q "tape_lane_transport_v4_3_min_heart.py" "$SYNC"
-grep -q "--no-save-checkpoints" "$SYNC"
+grep -q -- "--no-save-checkpoints" "$SYNC"
 
 echo "[validate v4.3] ok"

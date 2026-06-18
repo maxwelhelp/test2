@@ -29,9 +29,9 @@ bash simple_butterfly_matrix_v4_tape_lane/commands/validate_v4_3_min_heart.sh
 echo "[v4.3 sync] gradient sanity"
 OUT="$REPORT_DIR/grad_sanity.json" bash simple_butterfly_matrix_v4_tape_lane/commands/grad_sanity_v4_3_min_heart.sh | tee "$REPORT_DIR/grad_sanity.log"
 
-echo "[v4.3 sync] run -> $REPORT_DIR"
+echo "[v4.3 sync] run audit-fixed wrapper -> $REPORT_DIR"
 set +e
-python simple_butterfly_matrix_v4_tape_lane/tape_lane_transport_v4_3_min_heart.py \
+bash simple_butterfly_matrix_v4_tape_lane/commands/run_v4_3_min_heart_audit_fixed.sh \
   --data-root "$DATA_ROOT" \
   --epochs "$EPOCHS" \
   --train-limit "$TRAIN_LIMIT" \
@@ -86,7 +86,7 @@ STATUS="simple_butterfly_matrix_v4_tape_lane/AGENT_STATUS.md"
 cat > "$STATUS" <<EOF_STATUS
 # Agent Status
 
-Last run: v4.3_min_heart
+Last run: v4.3_min_heart_audit_fixed
 Timestamp: $TS
 Report dir: $REPORT_DIR
 Command: sync_run_5ep_v4_3_min_heart_push_logs.sh
@@ -116,21 +116,27 @@ try:
     tr = data.get('last_trace_feedback') or {}
     route = tr.get('route') or {}
     head = tr.get('head') or {}
+    memory = tr.get('memory') or {}
     flags = []
     bm = float(route.get('boundary_mean', 0.0) or 0.0)
     bf = float(route.get('boundary_flatness', 0.0) or 0.0)
     ent = float(route.get('entropy_mean', 0.0) or 0.0)
     detail = float(head.get('detail_attention_mass', 0.0) or 0.0)
+    mem_w = float(memory.get('write_mean', 0.0) or 0.0)
+    mem_c = float(memory.get('consumer_score', 0.0) or 0.0)
     if bm > 0.90 and bf < 0.05: flags.append('BOUNDARY_EXPLOIT')
     if bm < 0.05: flags.append('BOUNDARY_DEAD')
     if ent > 1.30: flags.append('ROUTE_UNIFORM')
     if detail > 0.55: flags.append('DETAIL_SHORTCUT')
+    if mem_w < 0.03: flags.append('MEMORY_DEAD')
+    if mem_w > 0.30 and mem_c < 0.08: flags.append('MEMORY_JUNK')
     with open(dst, 'a', encoding='utf-8') as f:
         f.write('\nSummary:\n')
         f.write(f"- best_acc: {float(data.get('best_acc', 0.0))*100:.2f}% @ epoch {data.get('best_epoch', 0)}\n")
         f.write(f"- boundary_mean: {bm:.4f}\n")
         f.write(f"- route_entropy: {ent:.4f}\n")
         f.write(f"- detail_attention_mass: {detail:.4f}\n")
+        f.write(f"- memory_write/consumer: {mem_w:.4f}/{mem_c:.4f}\n")
         f.write(f"- collapse_flags: {','.join(flags) if flags else 'NONE'}\n")
 except Exception as e:
     with open(dst, 'a', encoding='utf-8') as f:

@@ -1,0 +1,36 @@
+REPORT_TO_CHATGPT
+
+Версия: v4.6_loop_core
+epoch: 5  gumbel_tau=0.7164
+train_ce=2.2026 train_acc=19.24% val_loss=2.3562 val_acc=10.60% best=10.90%
+
+Closed loop:
+- The controller decision affects execution, execution affects loss, loss gradient updates the controller decision path.
+- Council/JSON feedback is not used for training; StepAnalyzer is report-only.
+
+Boundary / route:
+- boundary_mean/std/peaks: 0.2829/0.0051/0 peaks=[]
+- route_entropy_mean: 0.2798
+- self_route_mass: 0.2488
+- useful_transition_mass: 0.4698
+- disallowed_route_mass: 0.2814
+
+Primitive / signs:
+- primitive_entropy_mean: 1.7246
+- primitive_top1_share: 0.8750
+- primitive_sign_negative_share: 0.6134
+- primitive_sign_abs_mean: 0.4552
+
+Memory:
+- forget: 0.7274
+- write_norm/read_norm/read_influence: 1.1520/0.0435/0.0317
+
+cost_dominance aux/task: 0.0000
+collapse_flags: BOUNDARY_DEAD,BOUNDARY_FLAT,PRIMITIVE_COLLAPSE
+
+Артефакты:
+- metrics.csv
+- trace_epoch_XXX.json
+- final_report.json
+- train.log если запускался sync script
+- AGENT_STATUS.md

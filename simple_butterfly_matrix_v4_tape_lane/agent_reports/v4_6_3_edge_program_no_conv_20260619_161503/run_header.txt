@@ -1,0 +1,1 @@
+[v4.6.3 no-conv sync] branch=codex-full-agent-plan report_dir=simple_butterfly_matrix_v4_tape_lane/agent_reports/v4_6_3_edge_program_no_conv_20260619_161503 edge_penalty=1 bins=128

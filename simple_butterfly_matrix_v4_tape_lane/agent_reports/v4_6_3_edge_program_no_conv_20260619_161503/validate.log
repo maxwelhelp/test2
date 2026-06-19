@@ -1,0 +1,9 @@
+[v4.6.1 validate] py_compile
+[v4.6.1 validate] --help smoke
+[v4.6.1 validate] import smoke
+V461GroupedLoopCoreClassifier JointController ParallelPrimitiveSelector MatrixMemory groups= ['keep', 'channel', 'correction', 'aggregation', 'memory', 'composition']
+[v4.6.1 validate] banned runtime mechanisms scan
+[v4.6.1 validate] shell syntax
+[v4.6.1 validate] cleanup pycache
+[v4.6.1 validate] checkpoint guard
+[v4.6.1 validate] OK

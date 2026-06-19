@@ -1,0 +1,15 @@
+batch_size=128
+eval_batch_size=256
+workers=4
+device=cuda
+amp=fp16
+dim=128
+steps=8
+lanes=4
+edges=16
+num_primitives=18
+primitive_rank=32
+edge_credit_penalty=1
+credit_ablation_batch=16
+synthetic_data=disabled
+synthetic_fallback=disabled

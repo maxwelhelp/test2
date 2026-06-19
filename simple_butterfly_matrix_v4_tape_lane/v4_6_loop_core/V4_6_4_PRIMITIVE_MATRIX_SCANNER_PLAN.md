@@ -13,38 +13,38 @@ Navigation is regenerated only after all content edits.
 
 | Lines | Section | Purpose |
 |---:|---|---|
-| 18-54 | Purpose / short lock | what this plan targets |
-| 56-105 | Terminology lock | layer/slot/action naming |
-| 107-152 | Coverage checklist | all transferred ideas |
-| 154-460 | Critical failure modes and required fixes | mandatory engineering fixes |
-| 462-521 | Minimal vertical slice first | first empirical proof target |
-| 523-583 | Full architecture diagram | forward data path |
-| 585-625 | Closed-loop learning diagram | credit loop |
-| 627-665 | PrimitiveMatrix | 5x5/10x10 action topology |
-| 667-723 | HybridScanner | grid+semantic+usage+random scanner |
-| 725-749 | ProjectionScanner | separate readable projections |
-| 751-799 | Top-K low-rank simulation and mandatory influence | cheap thinking before acting |
-| 801-845 | Projection gradient paths | how scanner/simulator learn |
-| 847-892 | ActionMatrix execution | cell instruction execution |
-| 894-929 | Gate separation | separate gates |
-| 931-975 | Branching and variable output count | soft branch/merge slots |
-| 977-1035 | Sequential layer specialization | layers listen and specialize |
-| 1037-1090 | Input encoder honesty | Conv/no-conv and matrix frontend |
-| 1092-1177 | Honest input curriculum | Teacher/Audit/Deploy |
-| 1179-1213 | Mode-specific credit | teacher/audit/deploy credit buffers |
-| 1215-1285 | Honesty audits | honesty tests |
-| 1287-1376 | Universal insertion into neural network layers | standalone and plug-in modes |
-| 1378-1429 | TokenSlotAdapter for attention replacement | token-slot mapping and incremental decode |
-| 1431-1491 | Transformer wrapper modes | after/before/replace attention |
-| 1493-1525 | Loss staging | start with few losses |
-| 1527-1567 | Losses and protections | loss list |
-| 1569-1634 | Credit and ablation | credit levels |
-| 1636-1713 | Reports required | artifacts and report fields |
-| 1715-1795 | Implementation plan | staged implementation |
-| 1797-1822 | What not to do | avoid shortcuts |
-| 1824-1875 | Evaluation plan | comparisons and metrics |
-| 1877-1924 | Acceptance rules | success criteria |
-| 1926-1897 | Current conclusion | locked direction |
+| 51-87 | Purpose / short lock | what this plan targets |
+| 89-138 | Terminology lock | layer/slot/action naming |
+| 140-185 | Coverage checklist | all transferred ideas |
+| 187-493 | Critical failure modes and required fixes | mandatory engineering fixes |
+| 495-554 | Minimal vertical slice first | first empirical proof target |
+| 556-616 | Full architecture diagram | forward data path |
+| 618-658 | Closed-loop learning diagram | credit loop |
+| 660-698 | PrimitiveMatrix | 5x5/10x10 action topology |
+| 700-756 | HybridScanner | grid+semantic+usage+random scanner |
+| 758-782 | ProjectionScanner | separate readable projections |
+| 784-832 | Top-K low-rank simulation and mandatory influence | cheap thinking before acting |
+| 834-873 | Projection gradient paths | how scanner/simulator learn |
+| 875-925 | ActionMatrix execution | cell instruction execution |
+| 927-951 | Gate separation | separate gates |
+| 953-993 | Branching and variable output count | soft branch/merge slots |
+| 995-1054 | Sequential layer specialization | layers listen and specialize |
+| 1056-1107 | Input encoder honesty | Conv/no-conv and matrix frontend |
+| 1109-1190 | Honest input curriculum | Teacher/Audit/Deploy |
+| 1192-1234 | Mode-specific credit | teacher/audit/deploy credit buffers |
+| 1236-1309 | Honesty audits | honesty tests |
+| 1311-1393 | Universal insertion into neural network layers | standalone and plug-in modes |
+| 1395-1438 | TokenSlotAdapter for attention replacement | token-slot mapping and incremental decode |
+| 1440-1487 | Transformer wrapper modes | after/before/replace attention |
+| 1489-1514 | Loss staging | start with few losses |
+| 1516-1546 | Losses and protections | loss list |
+| 1548-1597 | Credit and ablation | credit levels |
+| 1599-1666 | Reports required | artifacts and report fields |
+| 1668-1731 | Implementation plan | staged implementation |
+| 1733-1756 | What not to do | avoid shortcuts |
+| 1758-1815 | Evaluation plan | comparisons and metrics |
+| 1817-1862 | Acceptance rules | success criteria |
+| 1864-1897 | Current conclusion | locked direction |
 
 ---
 

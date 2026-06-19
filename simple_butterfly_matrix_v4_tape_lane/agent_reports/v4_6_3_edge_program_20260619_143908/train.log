@@ -1,0 +1,7 @@
+loaded datasets: train=12000 val=2000 classes=['yes', 'no', 'up', 'down', 'left', 'right', 'on', 'off', 'stop', 'go']
+V463EdgeProgram params=931018 steps=8 lanes=4 edges=16 D=128 K=18 penalty=True device=cuda amp=fp16
+epoch 001/5 train=2.3121/11.21% val=2.2903/11.15% best=11.15%@1 tau=1.000
+epoch 002/5 train=2.1254/19.50% val=1.7143/35.95% best=35.95%@2 tau=0.920
+epoch 003/5 train=1.4286/49.26% val=1.1275/59.40% best=59.40%@3 tau=0.846
+epoch 004/5 train=1.0946/62.11% val=0.8720/68.40% best=68.40%@4 tau=0.779
+epoch 005/5 train=0.9216/68.10% val=0.7482/73.90% best=73.90%@5 tau=0.716

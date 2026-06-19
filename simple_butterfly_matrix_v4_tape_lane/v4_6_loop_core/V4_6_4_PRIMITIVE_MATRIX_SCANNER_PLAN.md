@@ -5,88 +5,98 @@ Agent navigation.
 Use:
   grep -n '^## ' V4_6_4_PRIMITIVE_MATRIX_SCANNER_PLAN.md
   sed -n 'START,ENDp' V4_6_4_PRIMITIVE_MATRIX_SCANNER_PLAN.md
+
+Navigation is regenerated only after all content edits.
 -->
 
 ## Agent quick navigation
 
 | Lines | Section | Purpose |
 |---:|---|---|
-| 46-79 | Purpose / short lock | what this plan targets |
-| 81-126 | Terminology lock | layer/slot/action naming |
-| 128-164 | Coverage checklist | all transferred ideas |
-| 166-196 | Why v4.6.4 is needed | what v4.6.3 lacks |
-| 198-262 | Full architecture diagram | forward data path |
-| 264-318 | Closed-loop learning diagram | credit loop |
-| 320-361 | PrimitiveMatrix | 5x5/10x10 action topology |
-| 363-412 | WindowScanner and ProjectionScanner | scanner design |
-| 414-451 | Top-K low-rank simulation | cheap thinking before acting |
-| 453-493 | Projection gradient paths | how scanner/simulator learn |
-| 495-543 | ActionMatrix execution | cell instruction execution |
-| 545-574 | Gate separation | separate gates |
-| 576-622 | Skip / replace / disable | repair and protections |
-| 624-666 | Branching and variable output count | soft branch/merge slots |
-| 668-722 | Sequential layer specialization | layers listen and specialize |
-| 724-773 | Input encoder honesty | Conv/no-conv and matrix frontend |
-| 775-858 | Honest input curriculum | Teacher/Audit/Deploy |
-| 860-935 | Honesty audits | honesty tests |
-| 937-1034 | Universal insertion into neural network layers | standalone and plug-in modes |
-| 1036-1098 | Transformer wrapper modes | after/before/replace attention |
-| 1100-1136 | Losses and protections | loss list |
-| 1138-1187 | Credit and ablation | credit levels |
-| 1189-1243 | Reports required | artifacts and report fields |
-| 1245-1317 | Implementation plan | staged v4.6.4-a..k |
-| 1319-1339 | What not to do | avoid shortcuts |
-| 1341-1391 | Evaluation plan | comparisons and metrics |
-| 1393-1426 | Acceptance rules | success criteria |
-| 1428-1458 | Current conclusion | locked direction |
+| 18-54 | Purpose / short lock | what this plan targets |
+| 56-105 | Terminology lock | layer/slot/action naming |
+| 107-152 | Coverage checklist | all transferred ideas |
+| 154-460 | Critical failure modes and required fixes | mandatory engineering fixes |
+| 462-521 | Minimal vertical slice first | first empirical proof target |
+| 523-583 | Full architecture diagram | forward data path |
+| 585-625 | Closed-loop learning diagram | credit loop |
+| 627-665 | PrimitiveMatrix | 5x5/10x10 action topology |
+| 667-723 | HybridScanner | grid+semantic+usage+random scanner |
+| 725-749 | ProjectionScanner | separate readable projections |
+| 751-799 | Top-K low-rank simulation and mandatory influence | cheap thinking before acting |
+| 801-845 | Projection gradient paths | how scanner/simulator learn |
+| 847-892 | ActionMatrix execution | cell instruction execution |
+| 894-929 | Gate separation | separate gates |
+| 931-975 | Branching and variable output count | soft branch/merge slots |
+| 977-1035 | Sequential layer specialization | layers listen and specialize |
+| 1037-1090 | Input encoder honesty | Conv/no-conv and matrix frontend |
+| 1092-1177 | Honest input curriculum | Teacher/Audit/Deploy |
+| 1179-1213 | Mode-specific credit | teacher/audit/deploy credit buffers |
+| 1215-1285 | Honesty audits | honesty tests |
+| 1287-1376 | Universal insertion into neural network layers | standalone and plug-in modes |
+| 1378-1429 | TokenSlotAdapter for attention replacement | token-slot mapping and incremental decode |
+| 1431-1491 | Transformer wrapper modes | after/before/replace attention |
+| 1493-1525 | Loss staging | start with few losses |
+| 1527-1567 | Losses and protections | loss list |
+| 1569-1634 | Credit and ablation | credit levels |
+| 1636-1713 | Reports required | artifacts and report fields |
+| 1715-1795 | Implementation plan | staged implementation |
+| 1797-1822 | What not to do | avoid shortcuts |
+| 1824-1875 | Evaluation plan | comparisons and metrics |
+| 1877-1924 | Acceptance rules | success criteria |
+| 1926-1897 | Current conclusion | locked direction |
 
 ---
 
 ## Purpose / short lock
 
-This is the final architecture plan for the next version after v4.6.3.
+This file is the corrected plan for the next architecture after v4.6.3.
 
-The plan must cover two targets at once:
-
-```text
-1. current standalone experiments:
-   audio / SpeechCommands / other real datasets
-
-2. future plug-in mode:
-   insert the same mechanism inside existing neural networks
-   before Attention, after Attention, or instead of Attention / block operation
-```
-
-The core must be universal:
+It covers two targets:
 
 ```text
-PrimitiveMatrix -> Scanner -> Top-K Simulator -> ActionMatrix Controller -> Executor -> Credit
+1. standalone experiments now:
+   audio / SpeechCommands / synthetic program tests / other real datasets
+
+2. future plug-in layer mode:
+   insert the same mechanism into existing networks:
+   after Attention, before Attention, or as Attention/block replacement
 ```
 
-Only wrappers change:
+Core invariant:
+
+```text
+PrimitiveMatrix -> HybridScanner -> Top-K Simulator -> ActionMatrix Controller -> Executor -> Credit
+```
+
+The core should stay reusable. Wrappers/adapters may be non-trivial and are allowed to differ by domain:
 
 ```text
 audio wrapper
 structured matrix frontend wrapper
-Transformer after-attention wrapper
-Transformer before-attention wrapper
-Transformer replacement wrapper
-CNN / vision wrapper
-MLP / block wrapper
+Transformer token-slot adapter
+CNN / vision adapter
+MLP / block adapter
 ```
 
----
+Important correction:
+
+```text
+"only wrappers change" is true only for simple add-on modes.
+Attention replacement requires a real TokenSlotAdapter and incremental slot update.
+```
 
 ## Terminology lock
 
 Use these names in code, reports, and commits.
 
 ```text
-old step        -> layer
-old lane        -> slot
-old route       -> edge_gate
-old primitive selector -> layer operation selector
-old trace       -> program trace
+old step                  -> layer
+old lane                  -> slot
+old edge/route             -> source->target cell connection / edge_gate
+old primitive selector     -> layer operation selector
+old trace                  -> program trace
+old bypass                 -> skip
 ```
 
 Definitions:
@@ -96,7 +106,7 @@ Layer:
   one sequential program stage. Layer[t] receives state[t] and produces state[t+1].
 
 Slot:
-  one state/output position inside a layer.
+  state/output position inside a layer.
 
 PrimitiveMatrix:
   global topological library of possible operations/actions.
@@ -105,8 +115,8 @@ ActionMatrix:
   matrix of operations inside one layer:
   ActionMatrix[layer, source_slot, target_slot]
 
-Scanner:
-  cheap module that scans primitive/action space before full execution.
+HybridScanner:
+  scanner that combines local grid window, semantic top-k, usage/credit top-k, and random exploration.
 
 Proposal:
   candidate action suggested by scanner.
@@ -119,10 +129,13 @@ Executor:
 
 Skip:
   pass signal through instead of transforming.
-  This replaces the confusing name "bypass" in new code.
-```
 
----
+Disable:
+  no write from this cell.
+
+Replace:
+  candidate/topology replacement mechanism. It is not a second runtime primitive selector.
+```
 
 ## Coverage checklist
 
@@ -131,19 +144,28 @@ Everything below must be preserved in implementation.
 ```text
 [x] PrimitiveMatrix 5x5 first, later 10x10
 [x] primitive topology instead of flat primitive list
-[x] WindowScanner 3x3 first, later 5x5
+[x] functional initialization for primitive embeddings
+[x] HybridScanner, not pure fixed 3x3 WindowScanner
+[x] local grid candidates + semantic top-k + usage top-k + random exploration
+[x] semantic health metrics: semantic collapse, semantic_grid_mismatch, global_rescue_rate
 [x] separate projections: context / previous action / candidate / memory / head-input
 [x] Top-K low-rank simulation before full execution
+[x] simulator must affect choice_logits, not sit as decorative auxiliary head
+[x] logit component normalization and sim/context influence health metrics
+[x] budgeted hierarchical credit, not combinatorial full ablation
+[x] random cell/primitive credit budget independent of layer-level result
+[x] credit EMA, credit age, credit staleness metrics
 [x] ActionMatrix per layer, each cell is an operation
 [x] source->target context before primitive choice
 [x] separate edge_gate / write_gate / phase_gate / output_gate
-[x] route is not collapsed into write_gate
-[x] replace / skip / disable cells with collapse protection
+[x] cell_mode = softmax([transform, skip, disable])
+[x] replace is candidate/topology selection, not another no-op gate
 [x] edge_op scalar/sign per connection first
-[x] topology loss and diversity loss
 [x] delayed credit penalty from validation ablation
-[x] credit on layer/cell/primitive/branch/skip/replace/output/memory/scanner/simulator
+[x] mode-specific credit buffers: teacher / audit / deploy
+[x] deploy credit starts only after honesty floor is reached
 [x] layers listen to previous layer explicitly
+[x] hard_delete_layer_eval uses fixed identity/simple adapter, not learned ablation adapter
 [x] layer diversity and anti-copy specialization credit
 [x] weak role priors only, no hard expand/merge masks
 [x] variable output count via fixed max slots and soft gates
@@ -151,48 +173,385 @@ Everything below must be preserved in implementation.
 [x] dynamic output tape across layers/slots
 [x] Conv allowed only as temporary scaffold, not deploy proof
 [x] no-conv result recorded: raw pooling failed
-[x] honest input curriculum: Teacher -> Audit -> Deploy
+[x] Teacher -> Audit -> Deploy honesty curriculum
 [x] allowed hints are meta-process only and decay to zero
 [x] answer/leakage hints are banned
 [x] honesty audit: no_conv / no_hints / deploy / shuffled / random / transfer
-[x] universal plug-in mode: standalone / after Attention / before Attention / replace Attention
-[x] layer insertion tests: identity / random / frozen / baseline comparisons
+[x] universal plug-in mode exists, but attention replacement requires TokenSlotAdapter
+[x] incremental slot update is required for autoregressive replacement speed
+[x] first code target is a minimal vertical slice, not the whole huge plan
+[x] start with only few losses, add more one by one
 [x] staged implementation, not all at once
 ```
 
----
+## Critical failure modes and required fixes
 
-## Why v4.6.4 is needed
+These fixes are mandatory before coding scanner/simulator.
 
-v4.6.3 fixed the first logical bug:
+### 1. Pure grid WindowScanner is not enough
 
-```text
-old:
-  primitive[source] selected first
-  route[source,target] decided later
-
-new:
-  primitive[source,target] selected from edge context
-```
-
-But v4.6.3 still lacks the real program-builder pieces:
+Problem:
 
 ```text
-structured primitive/action space
-local neighborhoods in primitive space
-cheap proposal simulation before acting
-explicit ActionMatrix per layer
-replace / skip / disable repair
-variable number of intermediate outputs
-layer listening / specialization
-sim-quality training
-honesty curriculum and deploy audits
-universal plug-in layer wrappers
+center_embed = E[r,c]
+neighbors = E[r-1:r+2, c-1:c+2]
 ```
 
-So v4.6.4 must not be "one more edge router". It must be an ActionMatrix program builder.
+If scanner only sees physical grid neighbors, embedding semantics can learn one topology while the fixed grid still scans another. The grid becomes a permanent wrong neighborhood.
 
----
+Fix: use HybridScanner.
+
+```text
+candidate_set(cell) =
+  local_grid_window_3x3
+  ∪ semantic_topk_by_embedding
+  ∪ usage_topk_by_credit/history
+  ∪ random_explore_small
+```
+
+Start:
+
+```text
+local_grid_k = 9
+semantic_k = 4
+usage_k = 2
+random_k = 1
+```
+
+The grid is a weak inductive prior, not a prison.
+
+### 2. Semantic top-k can collapse
+
+Risk: if primitive embeddings collapse or drift randomly, semantic_topk becomes random.
+
+Protections:
+
+```text
+functional embedding initialization
+primitive_usage_balance
+near/far topology metrics
+semantic_neighbor_entropy
+embedding_covariance_rank
+semantic_collapse_flag
+```
+
+Define:
+
+```text
+semantic_grid_mismatch =
+  fraction of semantic_topk neighbors that are not in local_grid_window
+
+global_rescue_rate =
+  among selected semantic/usage/random candidates not present in the grid window,
+  fraction with positive real_gain or positive task contribution
+
+semantic_candidate_quality =
+  mean real_gain for semantic_topk candidates
+```
+
+### 3. Simulator can become decorative
+
+Problem: `sim_quality_loss` can train a prediction head that the controller ignores.
+
+Fix: predicted gain must enter the actual choice path.
+
+```text
+choice_logits =
+  LN(context_logits)
+  + alpha * LN(predicted_gain_logits)
+  + beta  * LN(sim_result_logits)
+  + gamma * LN(proposal_logits)
+```
+
+Use normalization so context logits cannot simply dominate by scale.
+
+Health metrics:
+
+```text
+predicted_gain_choice_corr
+choice_without_sim_delta
+sim_disabled_delta
+sim_vs_context_logit_norm_ratio
+sim_vs_context_grad_norm_ratio
+sim_pred_vs_real_corr
+```
+
+Optional weak alignment loss:
+
+```text
+choice_gain_alignment_loss =
+  KL(choice_weights || softmax(stopgrad(predicted_gain) / tau_gain))
+```
+
+Do not make it too strong. Controller may need to disagree with simulator.
+
+### 4. Full ablation is too expensive
+
+Do not ablate all layers/cells/primitives/branches/outputs every epoch.
+
+Use budgeted hierarchical credit:
+
+```text
+credit_budget_per_epoch = 32 or 64 components
+credit_batch = 16 or 32 samples
+credit_every = 1..3 epochs
+```
+
+Candidate selection:
+
+```text
+top active_mass
+top uncertainty / entropy
+top negative predicted_gain
+top previous suspicious credit
+random exploration
+```
+
+Avoid Simpson's paradox: even if a layer looks neutral, still reserve cell/primitive random budget.
+
+```text
+credit_budget:
+  40% suspicious from hierarchy
+  30% high activity / high uncertainty
+  20% random cells/primitives independent of layer result
+  10% outputs/memory/scanner/simulator spot checks
+```
+
+Store credit as EMA:
+
+```text
+credit_ema = decay * old + (1 - decay) * new
+credit_age tracked
+old credit decays in penalty weight
+```
+
+Report:
+
+```text
+credit_budget_used
+credit_components_tested
+credit_staleness_mean
+credit_age_max
+credit_mode
+credit_random_fraction
+```
+
+### 5. skip / disable / replace must not overlap
+
+Do not use independent skip_gate, disable_gate, replace_gate as three no-op mechanisms.
+
+Use mutually exclusive cell mode:
+
+```text
+cell_mode = softmax([transform, skip, disable])
+```
+
+Replace is separate and means candidate/topology selection:
+
+```text
+replace_distribution = softmax(candidate_replace_logits)
+candidate = replace_mixture(candidates)
+```
+
+Execution:
+
+```text
+transformed = executor(candidate)
+cell_output =
+  mode_transform * transformed
+  + mode_skip * passthrough
+  + mode_disable * 0
+```
+
+Report:
+
+```text
+transform_mass
+skip_mass
+disable_mass
+replace_entropy
+replace_usage
+skip_all_flag
+disable_all_flag
+```
+
+### 6. Attention replacement needs TokenSlotAdapter
+
+Attention operates over variable token positions. ActionMatrix operates over fixed slots. Replacement is not just a wrapper.
+
+Required modules:
+
+```text
+TokenToSlotAdapter:
+  tokens -> fixed slots
+
+PrimitiveMatrixScannerCore:
+  slots -> slots
+
+SlotToTokenAdapter:
+  slots -> token updates
+```
+
+For causal language modeling:
+
+```text
+no future leakage
+causal token-to-slot routing
+prefix/chunk causal masks
+incremental slot update
+```
+
+Incremental update is required:
+
+```text
+slots_t = update(slots_{t-1}, new_token_t)
+```
+
+Do not recompute `slots = f(all_tokens)` every generated token, or inference becomes O(n²) without attention kernels.
+
+### 7. Layer specialization ablation must be physical
+
+Do not test specialization only by forcing internal skip gates.
+
+Use hard delete evaluation:
+
+```text
+hard_delete_layer_eval:
+  remove layer[t] from computation
+  state[t] -> fixed external adapter -> layer[t+1]
+```
+
+External adapter must be simple and fixed:
+
+```text
+identity if shape matches
+fixed linear projection if dimensions differ
+not trained separately for each ablation
+```
+
+Report separately:
+
+```text
+external_delete_delta
+internal_skip_mass
+layer_transform_mass
+layer_output_credit
+layer_action_similarity
+```
+
+### 8. Credit must match curriculum mode
+
+Teacher credit with hints does not necessarily transfer to Deploy without hints.
+
+Maintain:
+
+```text
+credit_teacher
+credit_audit
+credit_deploy
+```
+
+Rules:
+
+```text
+Deploy simulator target uses credit_deploy.
+Teacher credit is scaffold-only and decays or is flushed at phase transitions.
+Audit credit can bridge teacher to deploy.
+```
+
+Deploy credit write gate:
+
+```text
+if honesty_score < honesty_floor:
+  run deploy audit for monitoring only
+  do not write into credit_deploy training buffer
+else:
+  write deploy credit into credit_deploy
+```
+
+Default:
+
+```text
+honesty_floor = 0.30 or task-specific minimum above random
+```
+
+### 9. Do not build ten stages before testing
+
+First code target is a minimal vertical slice:
+
+```text
+1 layer
+4 slots
+PrimitiveMatrix 5x5
+HybridScanner
+Top-K simulator
+mandatory sim influence
+budgeted credit
+small synthetic task with known program
+```
+
+If simulator is decorative there, fix it there. Do not wait until transformer plug-in.
+
+## Minimal vertical slice first
+
+Before full v4.6.4, implement a small proof slice.
+
+Goal:
+
+```text
+prove scanner/simulator/controller can discover a known program,
+not merely solve task through hidden dense shortcuts
+```
+
+Scale:
+
+```text
+layers = 1 or 2
+slots = 4
+PrimitiveMatrix = 5x5
+top_k = 4
+sim_rank = 8 or 16
+credit_budget_per_epoch = 32
+batch small enough for frequent diagnostics
+```
+
+Synthetic tasks with known answer:
+
+```text
+Task A: source slot 0 -> diff -> target slot 1 -> output
+Task B: source slot 0 -> split into two branches -> merge -> output
+Task C: memory_read/write required
+Task D: skip is useful for one cell but harmful if global
+Task E: semantic rescue needed: correct primitive is outside grid window but semantic_topk can find it
+```
+
+Metrics required in the first run:
+
+```text
+program_recovery_rate
+top_action_matches_known_program
+choice_without_sim_delta
+sim_disabled_delta
+predicted_gain_choice_corr
+sim_pred_vs_real_corr
+semantic_grid_mismatch
+global_rescue_rate
+credit_staleness_mean
+transform/skip/disable mass
+```
+
+Acceptance for vertical slice:
+
+```text
+known program recovered or close
+sim_disabled_delta > small positive threshold
+choice_without_sim_delta > small positive threshold
+global_rescue_rate > 0 on semantic rescue task
+no skip-all collapse
+credit budget stays bounded
+```
+
+Only after this slice passes should real audio or transformer plug-ins be expanded.
 
 ## Full architecture diagram
 
@@ -201,7 +560,7 @@ REAL INPUT
   |
   v
 Input mode
-  - raw / basic structured input in deploy
+  - raw/basic structured input in Deploy
   - optional scaffold only during Teacher/Audit
   |
   v
@@ -222,8 +581,8 @@ state_grid[layer=0, slots, D]
 |   operation embeddings + topology coordinates                     |
 |        |                                                          |
 |        v                                                          |
-| WindowScanner                                                     |
-|   scans 3x3 neighborhood in operation space                       |
+| HybridScanner                                                     |
+|   local grid + semantic top-k + usage top-k + random explore      |
 |        |                                                          |
 |        v                                                          |
 | ProjectionScanner                                                 |
@@ -235,9 +594,7 @@ state_grid[layer=0, slots, D]
 |        |                                                          |
 |        v                                                          |
 | ActionMatrix Controller                                           |
-|   chooses per source->target cell:                                |
-|   group / primitive / rank / compose / sign / edge_op             |
-|   edge_gate / write_gate / phase_gate / skip / replace / output   |
+|   uses context + predicted_gain + sim_result + proposal logits    |
 |        |                                                          |
 |        v                                                          |
 | Executor                                                          |
@@ -258,16 +615,12 @@ final output_state
 task head / loss
 ```
 
----
-
 ## Closed-loop learning diagram
-
-The architecture is not finished unless the feedback loop is explicit.
 
 ```text
 PrimitiveMatrix topology
   -> primitive/category embeddings
-  -> WindowScanner
+  -> HybridScanner
   -> proposal_scores
   -> ProjectionScanner
   -> Top-K candidates
@@ -278,61 +631,47 @@ PrimitiveMatrix topology
   -> Executor full operation
   -> state_next + memory_next + output_tape
   -> task_ce + structural losses
-  -> Credit Collector / ablation
+  -> Budgeted Credit Collector / ablation
   -> real_gain[layer, cell, primitive, branch, output, memory]
 ```
 
-Credit returns through several paths:
+Credit returns through:
 
 ```text
 sim_quality_loss:
   Simulator learns to predict consequences.
 
-proposal_loss:
+proposal_loss / task path:
   Scanner learns to propose useful candidates.
 
 topology_loss:
-  PrimitiveMatrix learns meaningful topology.
+  PrimitiveMatrix embeddings remain meaningful.
 
 credit_penalty:
-  Controller avoids bad action mass.
+  Controller avoids suspicious action mass.
 
 layer_credit:
   Layers specialize instead of copying each other.
+
+honesty_credit:
+  Deploy/no-hints behavior is protected from Teacher shortcut learning.
 ```
-
-Default credit schedule:
-
-```text
-epoch N:
-  train normally
-  measure ablation credit on validation subset
-
-epoch N+1:
-  softly penalize suspicious action mass
-```
-
-Do not start with same-batch hard credit. It is noisy and unstable.
-
----
 
 ## PrimitiveMatrix
 
-Start small:
+Start:
 
 ```text
 PrimitiveMatrix 5x5 = 25 cells
-window = 3x3
 top_k = 4
-sim_rank = 16 or 32
+sim_rank = 8/16 for vertical slice, 16/32 for real task
 ```
 
 Later:
 
 ```text
 PrimitiveMatrix 10x10 = 100 cells
-window = 3x3 or 5x5
-top_k = 4..8
+only after 5x5 scanner/simulator passes diagnostics
 ```
 
 Seed 5x5 layout:
@@ -345,33 +684,49 @@ memory_read   memory_write forget      recall      memory_gate
 output_write  output_mix   skip        replace     disable
 ```
 
-This is a seed topology, not a hard taxonomy. Training, usage, and credit may move behavior around.
-
-Topology meaning:
+Functional descriptor initialization:
 
 ```text
-row 0: local/state-preserving transformations
-row 1: learned transformations and products
-row 2: structural routing/splitting/writing
-row 3: memory operations
-row 4: output/program-control operations
+family: local / learned / routing / memory / output / control
+arity: unary / binary / memory
+effect: preserve / transform / merge / split / write / read / skip / disable
+cost: cheap / medium / expensive
+rank_capable: yes/no
+sign_capable: yes/no
 ```
 
----
+Initialize primitive embeddings from descriptor vectors plus small noise. Do not start from pure random embeddings.
 
-## WindowScanner and ProjectionScanner
+## HybridScanner
 
-WindowScanner scans operation space, not audio/image/time.
+HybridScanner replaces pure WindowScanner.
 
-For PrimitiveMatrix cell `(r,c)`:
+Candidate set:
 
 ```text
-center_embed = E[r,c]
-neighbors = E[r-1:r+2, c-1:c+2]
-window_context = concat(center, mean(neighbors), max(neighbors), topology_position)
+local_grid_candidates:
+  fixed 3x3 grid neighborhood around primitive cell
+
+semantic_candidates:
+  top-k nearest primitives by embedding similarity
+
+usage_candidates:
+  top-k by useful credit / historical usage in similar context
+
+random_candidates:
+  small exploration budget
 ```
 
-The scanner also sees current program context:
+Default:
+
+```text
+local_grid_k = 9
+semantic_k = 4
+usage_k = 2
+random_k = 1
+```
+
+Scanner inputs:
 
 ```text
 source_slot_state
@@ -382,22 +737,40 @@ layer context
 memory stats
 previous action embed
 optional allowed process hints
+candidate functional descriptor
+candidate embedding
+candidate source type: grid/semantic/usage/random
 ```
 
-ProjectionScanner keeps learning readable:
+Reports:
+
+```text
+grid_candidate_usage
+semantic_candidate_usage
+usage_candidate_usage
+random_candidate_usage
+semantic_grid_mismatch
+global_rescue_rate
+semantic_candidate_quality
+semantic_collapse_flag
+```
+
+## ProjectionScanner
+
+Keep projections separate.
 
 ```text
 proj_context      = W_context(current state/context)
 proj_before       = W_before(previous action choice)
 proj_candidate[k] = W_candidate(candidate primitive/action)
 proj_memory       = W_memory(memory stats)
-proj_head_input   = W_head(allowed head/input meta-hints)
+proj_head_input   = W_head(allowed meta-hints only)
 ```
 
 Candidate score:
 
 ```text
-score[k] = f(
+proposal_score[k] = f(
   proj_context,
   proj_before,
   proj_candidate[k],
@@ -408,19 +781,9 @@ score[k] = f(
 
 Do not replace this with one black-box concatenation first. Separate projections make reports and credit interpretable.
 
----
-
-## Top-K low-rank simulation
+## Top-K low-rank simulation and mandatory influence
 
 Controller should think before acting.
-
-Weak behavior:
-
-```text
-state -> choose primitive -> execute -> learn after the fact
-```
-
-v4.6.4 behavior:
 
 ```text
 state -> scanner proposes K candidates
@@ -439,30 +802,45 @@ topk = proposals.topk(k=4)
 
 sim_results = []
 for candidate in topk:
-    sim = low_rank_simulator(candidate, state_cell, memory)  # rank 16/32
+    sim = low_rank_simulator(candidate, state_cell, memory)
     sim_results.append(sim)
 
-choice_logits = controller(context, sim_results, proposal_scores)
+predicted_gain = sim_quality_head(sim_results)
+
+choice_logits = (
+    LN(context_logits)
+    + alpha * LN(predicted_gain_logits)
+    + beta * LN(sim_result_logits)
+    + gamma * LN(proposal_logits)
+)
+
 choice_weights = gumbel_softmax(choice_logits)
 full_update = executor(choice_weights, full_primitives, state_cell, memory)
 ```
 
----
+Simulator health checks are mandatory:
+
+```text
+choice_without_sim_delta
+sim_disabled_delta
+predicted_gain_choice_corr
+sim_vs_context_logit_norm_ratio
+sim_vs_context_grad_norm_ratio
+sim_pred_vs_real_corr
+```
+
+If disabling simulator does not hurt, simulator is decorative and the run is not accepted.
 
 ## Projection gradient paths
-
-There are four learning paths. All must be represented in reports eventually.
 
 Path A: simulation quality.
 
 ```text
 sim_result[k] = low_rank_sim(candidate[k], state_cell, memory)
 predicted_gain[k] = sim_quality_head(sim_result[k])
-real_gain[k] = stopgrad(delayed_credit[cell, candidate[k]])
+real_gain[k] = stopgrad(mode_specific_credit[cell, candidate[k]])
 loss_A = MSE(predicted_gain[k], real_gain[k])
 ```
-
-Gradient goes into simulator, sim_quality_head, candidate projections, and primitive embeddings.
 
 Path B: task loss through soft/gumbel choice.
 
@@ -471,8 +849,6 @@ choice_weights = gumbel_softmax(choice_logits)
 full_result = executor(choice_weights, full_primitives, state)
 loss_B = task_ce(full_result)
 ```
-
-Gradient goes through executor -> choice weights -> proposal scores -> scanner projections.
 
 Path C: topology/diversity losses.
 
@@ -489,7 +865,12 @@ if real_gain[cell, candidate] < 0:
   credit_penalty += action_mass[cell, candidate] * abs(real_gain)
 ```
 
----
+Path E: choice-gain alignment, weak.
+
+```text
+choice_gain_alignment_loss =
+  KL(choice_weights || softmax(stopgrad(predicted_gain) / tau_gain))
+```
 
 ## ActionMatrix execution
 
@@ -511,39 +892,41 @@ edge_op scalar/sign
 edge_gate
 write_gate
 phase_gate
-skip_gate
-replace_gate
-disable_gate
+cell_mode = transform / skip / disable
+replace_distribution over candidates
 output_gate
 ```
 
 Execution:
 
 ```text
-candidate_update = PrimitiveExecutor(primitive, source, target, memory)
-edge_update = edge_op * sign * candidate_update
-cell_output = (1 - skip_gate) * edge_update + skip_gate * passthrough
-active_mass = edge_gate * write_gate * phase_gate * (1 - disable_gate)
+candidate = replace_mixture(candidates)
+transformed = PrimitiveExecutor(candidate, source, target, memory)
+edge_update = edge_op * sign * transformed
+
+cell_output =
+  mode_transform * edge_update
+  + mode_skip * passthrough
+  + mode_disable * 0
+
+active_mass = edge_gate * write_gate * phase_gate
 state_next[target] += active_mass * cell_output
 ```
 
-Reports must show an effective hard interpretation:
+Reports:
 
 ```text
 top action per cell
 top primitive per cell
+transform/skip/disable mass
+replace entropy
 active cells
-skip cells
-replace cells
-disabled cells
 output cells
 ```
 
----
-
 ## Gate separation
 
-Keep the gates separate because they answer different questions:
+Keep gates separate.
 
 ```text
 edge_gate[i,j]:
@@ -558,71 +941,18 @@ phase_gate[i,j]:
 output_gate[t,j]:
   should layer t slot j write to output tape?
 
-skip_gate[i,j]:
-  should this cell pass signal without transformation?
+cell_mode[i,j]:
+  transform / skip / disable
 
-disable_gate[i,j]:
-  should this cell do no write?
-
-replace_gate[i,j,k]:
-  should scanner replace current/topological cell by candidate k?
+replace_distribution[i,j,k]:
+  which candidate action replaces the topological/default action?
 ```
 
-Never collapse `edge_gate` into `write_gate`. It destroys analysis and credit.
-
----
-
-## Skip / replace / disable
-
-Skip replaces the earlier ambiguous word "bypass".
-
-Skip:
-
-```text
-cell_out = (1 - skip_gate) * primitive_out + skip_gate * passthrough
-```
-
-Risk:
-
-```text
-skip everywhere -> program disappears
-```
-
-Protections:
-
-```text
-skip_budget_loss
-skip_all_collapse_penalty
-minimum_active_operation_mass
-```
-
-Replace:
-
-```text
-replace_weight[cell, candidate]
-```
-
-This lets scanner repair bad cells.
-
-Disable:
-
-```text
-disable_gate[cell]
-```
-
-Protection:
-
-```text
-disable_budget
-min_useful_cells_per_layer
-credit penalty if disabling hurts
-```
-
----
+Never collapse `edge_gate` into `write_gate`.
 
 ## Branching and variable output count
 
-Use fixed max slots and soft gates, not dynamic tensor shapes.
+Use fixed max slots and soft gates.
 
 ```text
 max_slots = 8 or 16
@@ -662,8 +992,6 @@ output_state = weighted_merge(all active output writes)
 logits = classifier(output_state)
 ```
 
----
-
 ## Sequential layer specialization
 
 Layer `t` must explicitly listen to layer `t-1`.
@@ -698,35 +1026,44 @@ similarity = cosine(action_summary[t], action_summary[t-1])
 diversity_loss = relu(similarity - max_allowed_similarity)^2
 ```
 
-specialization_credit:
+Hard delete specialization evaluation:
 
 ```text
-ablate layer[t]
-if delta_CE <= 0:
-  layer[t] suspicious
+hard_delete_layer_eval:
+  remove layer[t] from graph
+  state[t] -> fixed adapter -> layer[t+1]
+```
 
-ablate layer[t] and allow layer[t-1] to skip into layer[t+1]
-if loss does not increase:
-  layer[t] is not specialized
+Fixed adapter:
+
+```text
+identity if shape matches
+fixed non-trained linear projection if needed
+not separately trained per ablation
 ```
 
 Reports:
 
 ```text
+external_delete_delta
+internal_skip_mass
+layer_transform_mass
+layer_output_credit
+layer_action_similarity
 layer_listen_score
-layer_action_similarity[t,t-1]
-layer_specialization_credit
 ```
-
----
 
 ## Input encoder honesty
 
-Current fact from v4.6.3:
+Current v4.6.3 fact:
 
 ```text
-normal Conv frontend: learned and produced useful edge/memory/output credit
-no-conv raw pooling + linear frontend: collapsed near random
+normal Conv frontend:
+  useful edge/memory/output credit appeared
+
+no-conv raw pooling + linear frontend:
+  collapsed near random
+  boundary dead / primitive collapse / output off
 ```
 
 Interpretation:
@@ -768,8 +1105,6 @@ Rule:
 basic reading language is allowed
 answer-like summary is forbidden
 ```
-
----
 
 ## Honest input curriculum
 
@@ -854,7 +1189,49 @@ class ScaffoldScheduler:
         return epoch > self.total * 0.66
 ```
 
----
+## Mode-specific credit
+
+Credit must match the mode in which the program will run.
+
+Buffers:
+
+```text
+credit_teacher
+credit_audit
+credit_deploy
+```
+
+Rules:
+
+```text
+Teacher credit:
+  allowed for scaffold learning only
+  decays or flushes at phase transition
+
+Audit credit:
+  bridge between teacher and deploy
+
+Deploy credit:
+  main target for sim_quality and final controller penalty
+```
+
+Deploy credit write gate:
+
+```text
+if honesty_score < honesty_floor:
+  run deploy audit for monitoring only
+  do not write into credit_deploy training buffer
+else:
+  write into credit_deploy
+```
+
+Default:
+
+```text
+honesty_floor = max(random_acc * 1.5, task_specific_minimum)
+```
+
+Never train final simulator only on Teacher/hinted credit.
 
 ## Honesty audits
 
@@ -931,11 +1308,9 @@ primitive collapse in deploy:
   builder cannot organize without scaffold
 ```
 
----
-
 ## Universal insertion into neural network layers
 
-v4.6.4 must be usable as a plug-in layer, not only as an audio classifier.
+v4.6.4 core must be usable as a plug-in layer, but plug-in work starts only after standalone vertical slice passes.
 
 Three insertion positions:
 
@@ -960,7 +1335,7 @@ Recommended path:
    tests whether mechanism prepares better input
 
 3. replace Attention:
-   real replacement test
+   real replacement test, requires TokenSlotAdapter
 ```
 
 Plug-in API:
@@ -999,25 +1374,12 @@ expected activation scale
 expected shape/channel count
 ```
 
-Forbidden from next layer:
+Forbidden:
 
 ```text
 next layer weights as direct readable shortcut
 target class information
 exact desired activation
-```
-
-Allowed from task head:
-
-```text
-ordinary loss gradient
-stopgrad confidence margin
-entropy / uncertainty scalar
-```
-
-Forbidden from task head:
-
-```text
 predicted class
 softmax probability vector
 which slot / primitive / action to choose
@@ -1030,7 +1392,50 @@ Head teaches through gradient.
 Head must not tell the mechanism the answer or operation.
 ```
 
----
+## TokenSlotAdapter for attention replacement
+
+Attention replacement is not just a wrapper.
+
+Required:
+
+```text
+TokenToSlotAdapter:
+  token activations [B, T, D] -> slots [B, S, D]
+
+PrimitiveMatrixScannerCore:
+  slots [B, S, D] -> updated slots [B, S, D]
+
+SlotToTokenAdapter:
+  updated slots -> token updates [B, T, D]
+```
+
+For causal/autoregressive mode:
+
+```text
+no future leakage
+causal token-to-slot routing
+prefix/chunk causal masks
+incremental slot update
+```
+
+Incremental slot update:
+
+```text
+slots_t = update(slots_{t-1}, new_token_t)
+token_update_t = slot_to_token(slots_t, token_t)
+```
+
+Do not recompute slots from all tokens at every generated token.
+
+Reports:
+
+```text
+token_slot_reconstruction_error
+slot_usage_by_position
+causal_leakage_check
+incremental_decode_cost
+action_matrix_vs_attention_similarity
+```
 
 ## Transformer wrapper modes
 
@@ -1081,24 +1486,36 @@ with_mechanism > random
 with_mechanism > frozen
 ```
 
-Replacement test:
+## Loss staging
+
+Do not start with all losses.
+
+Vertical slice losses:
 
 ```text
-mechanism_replace_attention >= attention_baseline
-or close accuracy with better cost/interpretability
+task_ce
+sim_quality_loss
+one collapse protection loss:
+  min_transform_mass or skip_all_penalty
 ```
 
-Add-on test:
+Then add one by one:
 
 ```text
-attention + mechanism > attention only
+choice_gain_alignment_loss
+credit_penalty
+primitive_usage_balance
+topology/diversity losses
+layer_listen_loss
+layer_diversity_loss
+honesty_penalty
 ```
 
----
+Every added loss must have before/after metrics showing it helped or at least did not break core behavior.
 
 ## Losses and protections
 
-Base losses:
+Base/later loss list:
 
 ```text
 task_ce
@@ -1108,31 +1525,25 @@ output_gate_cost
 skip_budget_loss
 disable_budget_loss
 min_active_cells_loss
+min_transform_mass
 primitive_usage_balance
 primitive_topology_loss
 primitive_diversity_loss
+semantic_collapse_loss
 edge_sign_balance_loss
-layer_listen_loss
-diversity_between_layers_loss
-specialization_credit_loss
+sim_quality_loss
+choice_gain_alignment_loss
 credit_bad_cell_loss
 credit_bad_primitive_loss
 credit_bad_edge_loss
+layer_listen_loss
+diversity_between_layers_loss
+specialization_credit_loss
 honesty_penalty
-```
-
-Later losses:
-
-```text
-sim_quality_loss
-scanner_proposal_accuracy_loss
-predicted_gain_calibration_loss
 plug_in_layer_honesty_loss
 ```
 
-Do not start with strong weights. Keep all new regularizers weak and report-heavy first.
-
----
+Weights must start small. Reports must show raw loss values and weighted contributions.
 
 ## Credit and ablation
 
@@ -1151,8 +1562,8 @@ primitive:
 branch:
   disable child branch
 
-skip:
-  force skip / force non-skip
+mode:
+  force transform / force skip / force disable
 
 replace:
   disable replacement candidate
@@ -1164,7 +1575,7 @@ memory:
   no memory / no write / no read
 
 scanner:
-  disable scanner proposals
+  disable scanner proposal source: grid/semantic/usage/random
 
 simulation:
   disable simulated outcomes
@@ -1183,7 +1594,7 @@ delta_CE < 0:
   disabling helped, component suspicious
 ```
 
----
+Credit is budgeted, hierarchical, EMA-smoothed, and mode-specific.
 
 ## Reports required
 
@@ -1215,16 +1626,31 @@ layer_specialization_credit
 useful/suspicious cells
 useful/suspicious branches
 sim_pred_vs_real_corr
+predicted_gain_choice_corr
+choice_without_sim_delta
+sim_disabled_delta
+sim_vs_context_logit_norm_ratio
+sim_vs_context_grad_norm_ratio
 scanner proposal vs real credit
+semantic_grid_mismatch
+global_rescue_rate
+semantic_candidate_quality
+semantic_collapse_flag
+credit_budget_used
+credit_components_tested
+credit_staleness_mean
 honesty_score
 full/no_conv/no_hints/deploy/shuffled/random accuracies
 conv_ablation_delta
 hint_ablation_delta
 deploy primitive diversity
-deploy action-matrix readability
+deploy ActionMatrix readability
 insertion_mode for plug-in runs
 mechanism_delta vs identity/random/frozen/baseline
 action_matrix_vs_attention_similarity
+token_slot_reconstruction_error
+causal_leakage_check
+incremental_decode_cost
 ```
 
 ASCII report example:
@@ -1239,81 +1665,70 @@ src2    SPLIT     CHANNEL   DISABLE   PRODUCT
 src3    MEMORY_R  RECALL    MERGE     KEEP
 ```
 
----
-
 ## Implementation plan
 
-Do not implement all at once.
+Do not implement all at once. Use empirical gates.
 
 ```text
 v4.6.4-a:
-  documentation + stable naming
+  corrected document + stable naming + agent navigation
 
 v4.6.4-b:
-  PrimitiveMatrix5x5 only
-  topology coordinates
-  neighbor window extraction
-  usage/topology/diversity metrics
+  minimal vertical slice on synthetic known-program tasks
+  1-2 layers, 4 slots, PrimitiveMatrix5x5
+  HybridScanner + mandatory sim influence + budgeted credit
 
 v4.6.4-c:
-  WindowScanner proposals
-  proposal_scores[group/primitive]
-  replace/skip/disable scores
+  PrimitiveMatrix5x5 infrastructure
+  functional embedding initialization
+  topology/semantic health metrics
 
 v4.6.4-d:
-  layer listening and specialization metrics
-  prev_layer_output/action_embed
-  layer_listen_score
-  layer_action_similarity
-  weak layer_listen_loss
-  layer ablation credit
+  HybridScanner production version
+  grid + semantic + usage + random candidates
+  global_rescue_rate report
 
 v4.6.4-e:
-  Top-K low-rank simulation
-  rank-16/32 simulator
-  controller sees simulated outcomes
+  budgeted hierarchical credit infrastructure
+  credit EMA / age / staleness
+  random cell budget independent of layer-level result
 
 v4.6.4-f:
   ActionMatrix executor
-  explicit cell_action table
-  group/primitive/rank/compose/sign/edge_op/skip/replace/disable/output
+  cell_mode=[transform, skip, disable]
+  replace as candidate/topology selection
 
 v4.6.4-g:
-  branch/output count
-  slot_alive
-  split_count 0/1/2
-  child_gate
-  merge_gate
-  final collector
+  layer listening and hard-delete specialization evaluation
+  fixed delete adapter
+  layer_listen_score / layer_action_similarity
 
 v4.6.4-h:
-  simulation quality learning
-  predicted_gain
-  real_gain from delayed credit
-  sim_quality_loss
-  sim_pred_vs_real_corr
+  branching/output count
+  slot_alive, split_count, child_gate, merge_gate, final collector
 
 v4.6.4-i:
-  honest scaffold curriculum and audit
+  honest scaffold curriculum and mode-specific credit
   Teacher/Audit/Deploy scheduler
   no_conv/no_hints/deploy/shuffle/random audits
-  honesty_score report
-  deploy checkpoint guard
+  deploy credit write gate
 
 v4.6.4-j:
-  universal plug-in wrappers
-  after-attention wrapper
-  before-attention wrapper
-  attention replacement wrapper
-  identity/random/frozen/baseline tests
-
-v4.6.4-k:
   structured matrix frontend
   audio frame/window/DCT/log-energy/delta/onset
   compare Conv scaffold vs matrix frontend vs deploy
+
+v4.6.5-a:
+  universal plug-in wrappers only after standalone acceptance
+  after-attention wrapper first
+  before-attention second
+  attention replacement last
+
+v4.6.5-b:
+  TokenSlotAdapter + incremental slot update for attention replacement
 ```
 
----
+Transformer replacement is intentionally pushed after standalone proof. Do not start there.
 
 ## What not to do
 
@@ -1321,8 +1736,10 @@ Avoid initially:
 
 ```text
 10x10 PrimitiveMatrix
+pure fixed WindowScanner as only candidate source
 hard top-k during training
 same-batch credit penalty
+full combinatorial ablation
 full edge MLP per connection
 strong topology loss
 strong skip penalty
@@ -1331,11 +1748,12 @@ hard expand/merge alternation constraints
 answer-like hints
 direct operation-choice hints
 reading next layer weights as shortcut
+learned external adapter in hard-delete layer ablation
+using Teacher credit as Deploy sim-quality target
 calling Teacher scaffold performance Deploy success
 claiming raw-input success without evidence
+starting with transformer replacement before standalone proof
 ```
-
----
 
 ## Evaluation plan
 
@@ -1344,10 +1762,11 @@ Compare:
 ```text
 v4.6.3 edge + Conv
 v4.6.3 no-conv
+v4.6.4 minimal vertical slice synthetic
 v4.6.4 PrimitiveMatrix only
-v4.6.4 with scanner
+v4.6.4 with HybridScanner
 v4.6.4 with simulation
-v4.6.4 full
+v4.6.4 full standalone
 v4.6.4 without scanner
 v4.6.4 without simulation
 v4.6.4 without layer listening
@@ -1356,15 +1775,16 @@ v4.6.4 without memory
 v4.6.4 structured matrix frontend
 v4.6.4 Teacher vs Audit vs Deploy
 v4.6.4 shuffled/random hints
-v4.6.4 Transformer after-attention plug-in
-v4.6.4 Transformer before-attention plug-in
-v4.6.4 Transformer attention replacement
+v4.6.5 Transformer after-attention plug-in
+v4.6.5 Transformer before-attention plug-in
+v4.6.5 Transformer attention replacement
 ```
 
 Metrics:
 
 ```text
 val_acc
+program_recovery_rate on synthetic
 frontend dependence
 collapse flags
 edge uniformity
@@ -1376,7 +1796,13 @@ layer_specialization_credit
 memory ablation delta
 output ablation delta
 sim_pred_vs_real_corr
+predicted_gain_choice_corr
+choice_without_sim_delta
+sim_disabled_delta
 scanner-vs-real correlation
+semantic_grid_mismatch
+global_rescue_rate
+credit_staleness_mean
 honesty_score
 conv_ablation_delta
 hint_ablation_delta
@@ -1385,13 +1811,23 @@ deploy ActionMatrix readability
 mechanism_delta vs identity/random/frozen
 action_matrix_vs_attention_similarity
 speed / params / memory
+incremental_decode_cost
 ```
-
----
 
 ## Acceptance rules
 
-Do not call the architecture successful unless these checks are passed.
+Do not call the architecture successful unless these checks pass.
+
+Minimal vertical slice:
+
+```text
+known program recovery is positive
+sim_disabled_delta > threshold
+choice_without_sim_delta > threshold
+global_rescue_rate > 0 on semantic rescue task
+no skip-all collapse
+credit budget bounded
+```
 
 Standalone mode:
 
@@ -1401,6 +1837,8 @@ ActionMatrix readable
 no primitive collapse
 non-trivial layer specialization
 useful cell/branch/output credit
+simulator is not decorative
+HybridScanner uses non-grid candidates meaningfully
 ```
 
 Honest deploy mode:
@@ -1420,9 +1858,8 @@ after-attention: attention + mechanism > attention only
 before-attention: input preparation improves downstream attention
 replacement: mechanism >= attention baseline or close with better cost/interpretability
 with_mechanism > identity/random/frozen mechanism
+causal replacement passes no-future-leakage and incremental update checks
 ```
-
----
 
 ## Current conclusion
 
@@ -1431,9 +1868,11 @@ Locked direction:
 ```text
 Controller stops choosing from a flat primitive list.
 Controller scans a topological PrimitiveMatrix.
-Controller sees local primitive neighborhoods.
+Controller uses HybridScanner so topology is not trapped by fixed grid.
 Controller simulates Top-K candidates in low rank.
+Simulator must affect the actual choice.
 Controller writes explicit ActionMatrix layers.
+Credit is budgeted, mode-specific, and not combinatorial.
 ```
 
 Layer rule:
@@ -1452,6 +1891,7 @@ Deploy must survive without scaffold/hints.
 Universal rule:
 
 ```text
-The core must work both as a standalone model and as an insertable neural-network layer.
-Only wrappers change.
+The core should become insertable into neural networks,
+but attention replacement requires TokenSlotAdapter and incremental slot update.
+Do standalone proof first.
 ```
